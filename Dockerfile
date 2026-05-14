@@ -11,6 +11,9 @@ COPY package*.json ./
 RUN npm install --omit=dev
 
 # 소스 코드 복사
+# 필수 구조:
+#   ./index.js
+#   ./static/index.html   ← index.html 은 반드시 static/ 폴더 안에 위치
 COPY . .
 
 # Cloud Run 포트 노출

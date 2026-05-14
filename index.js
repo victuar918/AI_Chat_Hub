@@ -16,6 +16,12 @@ import { google } from 'googleapis';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js';
 import EventSource from 'eventsource';
+import { fileURLToPath } from 'url';
+import { dirname, join } from 'path';
+
+// Node.js ESM 환경에서 __dirname 대체 (type:module 필수)
+const __filename = fileURLToPath(import.meta.url);
+const __dirname  = dirname(__filename);
 
 // Node.js 환경에서 MCP SDK SSE 통신을 위한 전역 설정
 global.EventSource = EventSource;
@@ -24,6 +30,15 @@ const app = express();
 app.use(cors());
 app.use(express.json({ limit: '50mb' }));
 app.set('trust proxy', true);
+
+// ── 정적 파일 서빙 ───────────────────────────────────────────
+// 파일 구조: ./static/index.html (Dockerfile에서 COPY로 포함)
+app.use(express.static(join(__dirname, 'static')));
+
+// GET / → index.html (static 미스 시 fallback)
+app.get('/', (_req, res) => {
+  res.sendFile(join(__dirname, 'static', 'index.html'));
+});
 
 // ── 상수 ────────────────────────────────────────────────────
 const PORT          = process.env.PORT          || 8080;
@@ -52,7 +67,6 @@ async function loadDriveKnowledge() {
     const auth  = new google.auth.GoogleAuth({ scopes: ['https://www.googleapis.com/auth/drive.readonly'] });
     const drive = google.drive({ version: 'v3', auth });
 
-    // ✅ 템플릿 리터럴 수정: 쿼리 문자열 정상화
     const listRes = await drive.files.list({
       q: `'${DRIVE_FOLDER_ID}' in parents and trashed=false`,
       fields: 'files(id, name, mimeType)',
@@ -166,7 +180,6 @@ app.post('/api/chat', async (req, res) => {
 
     const activePersona = (accessMode === 'Freestyle') ? FREESTYLE_PERSONA : STRICT_PERSONA;
 
-    // ✅ 'latex' 오염 문자열 제거 + ${} 변수 정상화
     const finalSystemPrompt = `[시스템 페르소나 선언]
 ${activePersona}
 
@@ -186,12 +199,9 @@ ${system}`;
     };
 
     if (isClaude) {
-      // Adaptive Thinking: budgetTokens < maxOutputTokens 필수
       modelConfig.generationConfig = {
         maxOutputTokens: 16000,
-        thinkingConfig: {
-          thinkingBudget: 8000,
-        },
+        thinkingConfig: { thinkingBudget: 8000 },
       };
     } else {
       modelConfig.generationConfig = {
@@ -204,7 +214,6 @@ ${system}`;
     const generativeModel = vertexAI.getGenerativeModel(modelConfig);
 
     // ── 메시지 포맷 변환 ──────────────────────────────────────
-    // 연속된 동일 role 병합 (API 오류 방지)
     let currentMessages = [];
     for (const m of messages) {
       const role = (m.role === 'assistant') ? 'model' : 'user';
@@ -216,7 +225,6 @@ ${system}`;
         currentMessages.push({ role, parts: [{ text }] });
       }
     }
-    // 항상 user 메시지로 시작
     if (currentMessages.length === 0 || currentMessages[0].role !== 'user') {
       currentMessages.unshift({ role: 'user', parts: [{ text: '(시작)' }] });
     }
@@ -236,7 +244,6 @@ ${system}`;
         const parts = chunk.candidates?.[0]?.content?.parts || [];
         for (const part of parts) {
           if (part.functionCall) {
-            // 도구 호출 감지 → 스트리밍 중단 후 도구 실행
             functionCallDetected = part.functionCall;
             break;
           } else if (part.text) {
@@ -254,7 +261,6 @@ ${system}`;
         try {
           if (!mcpClient) throw new Error('MCP Client not connected');
           const result = await mcpClient.callTool({ name, arguments: args });
-          // MCP SDK 응답 형식: { content: [{ type: 'text', text: '...' }] }
           toolResultStr = Array.isArray(result.content)
             ? result.content.map(c => c.text ?? JSON.stringify(c)).join('\n')
             : JSON.stringify(result);
@@ -263,7 +269,6 @@ ${system}`;
           console.error(`[MCP] ${name} 실패:`, e.message);
         }
 
-        // AI에게 도구 결과 전달 후 루프 계속
         currentMessages.push({ role: 'model', parts: [{ functionCall: functionCallDetected }] });
         currentMessages.push({
           role: 'user',
@@ -271,7 +276,6 @@ ${system}`;
         });
 
       } else {
-        // 도구 호출 없음 → 답변 완료
         break;
       }
     }
