@@ -1,17 +1,27 @@
 /**
- * ASTERION Hub — Chat Backend v2.1 (Node.js)
+ * ASTERION Hub — Chat Backend v2.2 (Node.js)
  * ─────────────────────────────────────────────────────────────
- * Claude  : Vertex AI (ADC 자동 인증) / claude-sonnet-4-6
- *           Adaptive Thinking (budgetTokens 8 000)
- * Gemini  : Vertex AI (ADC 자동 인증) / gemini-3.1-pro-preview
+ * Claude  : Vertex AI raw HTTP (ADC) — us-east5
+ *           publishers/anthropic  ← SDK 기본값(google) 우회
+ *           Adaptive Thinking (budget 8 000 tokens)
+ * Gemini  : 직접 Gemini API — generativelanguage.googleapis.com
+ *           gemini-3.1-pro-preview (Vertex AI 미등록 모델)
  * Drive   : googleapis ADC (동일 서비스 계정)
  * MCP     : @modelcontextprotocol/sdk SSE 클라이언트
  * ─────────────────────────────────────────────────────────────
+ * 수정 이력 v2.1 → v2.2
+ *   [Claude] @google-cloud/vertexai SDK 제거
+ *            → raw fetch + ADC Bearer 토큰으로 교체
+ *            → publishers/google → publishers/anthropic
+ *            → asia-northeast3 → us-east5 (Claude 지원 리전)
+ *   [Gemini] Vertex AI (location:'global', 미지원 모델) 제거
+ *            → generativelanguage.googleapis.com 직접 호출
+ *   [공통]   PROJECT_ID 기본값 수정
+ * ─────────────────────────────────────────────────────────────
  */
 
-import express from 'express';
-import cors from 'cors';
-import { VertexAI } from '@google-cloud/vertexai';
+import express   from 'express';
+import cors      from 'cors';
 import { google } from 'googleapis';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js';
@@ -19,288 +29,306 @@ import EventSource from 'eventsource';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 
-// Node.js ESM 환경에서 __dirname 대체 (type:module 필수)
 const __filename = fileURLToPath(import.meta.url);
 const __dirname  = dirname(__filename);
 
-// Node.js 환경에서 MCP SDK SSE 통신을 위한 전역 설정
+// MCP SDK SSE 통신용 전역 설정 (Node.js ESM 환경)
 global.EventSource = EventSource;
 
 const app = express();
 app.use(cors());
 app.use(express.json({ limit: '50mb' }));
 app.set('trust proxy', true);
-
-// ── 정적 파일 서빙 ───────────────────────────────────────────
-// 파일 구조: ./static/index.html (Dockerfile에서 COPY로 포함)
 app.use(express.static(join(__dirname, 'static')));
+app.get('/', (_req, res) => res.sendFile(join(__dirname, 'static', 'index.html')));
 
-// GET / → index.html (static 미스 시 fallback)
-app.get('/', (_req, res) => {
-  res.sendFile(join(__dirname, 'static', 'index.html'));
-});
+// ══════════════════════════════════════════════════════════════
+//  상수
+// ══════════════════════════════════════════════════════════════
+const PORT       = process.env.PORT       || 8080;
+const PROJECT_ID = process.env.PROJECT_ID || 'asterion-vedastro-mcp-server';
 
-// ── 상수 ────────────────────────────────────────────────────
-const PORT          = process.env.PORT          || 8080;
-const PROJECT_ID    = process.env.PROJECT_ID    || 'asterion-server';
+// Claude: Vertex AI (Anthropic publisher)
+// ⚠️ Claude on Vertex AI 지원 리전: us-east5 / us-central1 / europe-west1 / asia-southeast1
+//    asia-northeast3(서울)은 미지원 — us-east5 고정
 const CLAUDE_MODEL  = 'claude-sonnet-4-6';
-const CLAUDE_REGION = 'asia-northeast3';
-// gemini-3.1-pro-preview: 최신 Gemini 모델 (사용자 확인 완료)
-const GEMINI_MODEL  = 'gemini-3.1-pro-preview';
-const GEMINI_REGION = 'global';
+const CLAUDE_REGION = 'us-east5';
+
+// Gemini: 직접 API (gemini-3.1-pro-preview는 Vertex AI 미등록)
+const GEMINI_MODEL   = 'gemini-3.1-pro-preview';
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY
+                    || 'AIzaSyB5ySqdCdBQjaA5VpdReZNe51zW2XNpoFI';
 
 const DRIVE_FOLDER_ID = process.env.ASTERION_KNOWLEDGE_FOLDER_ID || '';
 const MCP_SERVER_URL  = process.env.MCP_SERVER_URL || '';
 
 // ══════════════════════════════════════════════════════════════
-// 1. Google Drive 지식베이스 로더 (ADC 자동 인증)
+//  ADC 인증 헬퍼 (Vertex AI Bearer 토큰)
+// ══════════════════════════════════════════════════════════════
+const vertexAuth = new google.auth.GoogleAuth({
+  scopes: ['https://www.googleapis.com/auth/cloud-platform'],
+});
+
+async function getVertexToken() {
+  const client        = await vertexAuth.getClient();
+  const { token }     = await client.getAccessToken();
+  if (!token) throw new Error('Vertex AI ADC 토큰 발급 실패 — 서비스 계정 권한 확인 필요');
+  return token;
+}
+
+// ══════════════════════════════════════════════════════════════
+//  1. Google Drive 지식베이스 로더
 // ══════════════════════════════════════════════════════════════
 let knowledgeContext = '';
 let knowledgeStatus  = 'not_loaded';
 
 async function loadDriveKnowledge() {
-  if (!DRIVE_FOLDER_ID) {
-    knowledgeStatus = 'no_folder_configured';
-    return;
-  }
+  if (!DRIVE_FOLDER_ID) { knowledgeStatus = 'no_folder_configured'; return; }
   try {
     const auth  = new google.auth.GoogleAuth({ scopes: ['https://www.googleapis.com/auth/drive.readonly'] });
     const drive = google.drive({ version: 'v3', auth });
 
     const listRes = await drive.files.list({
-      q: `'${DRIVE_FOLDER_ID}' in parents and trashed=false`,
-      fields: 'files(id, name, mimeType)',
-      pageSize: 50,
+      q:         `'${DRIVE_FOLDER_ID}' in parents and trashed=false`,
+      fields:    'files(id, name, mimeType)',
+      pageSize:  50,
     });
 
     const docs = [];
     for (const file of (listRes.data.files || [])) {
       try {
+        let text = '';
         if (file.mimeType === 'application/vnd.google-apps.document') {
-          const exportRes = await drive.files.export({ fileId: file.id, mimeType: 'text/plain' });
-          const text = typeof exportRes.data === 'string'
-            ? exportRes.data
-            : JSON.stringify(exportRes.data);
-          docs.push(`[${file.name}]\n${text.substring(0, 8000)}`);
-
-        } else if (file.mimeType === 'text/plain' || file.mimeType === 'text/markdown') {
-          const getRes = await drive.files.get({ fileId: file.id, alt: 'media' });
-          const text = typeof getRes.data === 'string'
-            ? getRes.data
-            : JSON.stringify(getRes.data);
-          docs.push(`[${file.name}]\n${text.substring(0, 8000)}`);
+          const r = await drive.files.export({ fileId: file.id, mimeType: 'text/plain' });
+          text = typeof r.data === 'string' ? r.data : JSON.stringify(r.data);
+        } else if (['text/plain', 'text/markdown'].includes(file.mimeType)) {
+          const r = await drive.files.get({ fileId: file.id, alt: 'media' });
+          text = typeof r.data === 'string' ? r.data : JSON.stringify(r.data);
         }
-      } catch (fileErr) {
-        console.warn(`[Drive] 파일 읽기 실패 (${file.name}):`, fileErr.message);
+        if (text) docs.push(`[${file.name}]\n${text.substring(0, 8000)}`);
+      } catch (e) {
+        console.warn(`[Drive] 파일 읽기 실패 (${file.name}):`, e.message);
       }
     }
 
     knowledgeContext = docs.join('\n\n---\n\n').substring(0, 500000);
     knowledgeStatus  = `loaded (${docs.length} files)`;
     console.log(`[System] 지식베이스 로드 완료: ${docs.length}개 파일`);
-
-  } catch (error) {
-    knowledgeStatus = `error: ${error.message}`;
-    console.error('[System] Drive 로드 실패:', error.message);
+  } catch (e) {
+    knowledgeStatus = `error: ${e.message}`;
+    console.error('[System] Drive 로드 실패:', e.message);
   }
 }
 
 loadDriveKnowledge();
 
 // ══════════════════════════════════════════════════════════════
-// 2. MCP 서버 연동
+//  2. MCP 서버 연동
 // ══════════════════════════════════════════════════════════════
-let mcpClient          = null;
-let mcpToolsForVertex  = [];
+let mcpClient         = null;
+let mcpTools          = [];
 
 async function connectMCPServer() {
-  if (!MCP_SERVER_URL) {
-    console.log('[System] MCP_SERVER_URL이 설정되지 않아 도구 연동을 건너뜁니다.');
-    return;
-  }
+  if (!MCP_SERVER_URL) return;
   try {
     const transport = new SSEClientTransport(new URL('/sse', MCP_SERVER_URL));
-    mcpClient = new Client(
-      { name: 'asterion-hub-client', version: '1.0.0' },
-      { capabilities: {} },
-    );
+    mcpClient = new Client({ name: 'asterion-hub-client', version: '1.0.0' }, { capabilities: {} });
     await mcpClient.connect(transport);
-
     const toolsRes = await mcpClient.listTools();
-    mcpToolsForVertex = (toolsRes.tools || []).map(t => ({
-      name:        t.name,
-      description: t.description,
-      parameters:  t.inputSchema,
+    mcpTools = (toolsRes.tools || []).map(t => ({
+      name: t.name, description: t.description, parameters: t.inputSchema,
     }));
-    console.log(`[System] MCP 서버 연동 완료. 사용 가능 도구: ${mcpToolsForVertex.length}개`);
-
-  } catch (error) {
-    console.error('[System] MCP 서버 연결 실패:', error.message);
+    console.log(`[System] MCP 서버 연동 완료. 도구: ${mcpTools.length}개`);
+  } catch (e) {
+    console.error('[System] MCP 서버 연결 실패:', e.message);
   }
 }
 
 connectMCPServer();
 
 // ══════════════════════════════════════════════════════════════
-// 3. 유틸: SSE write 헬퍼
+//  3. 유틸
 // ══════════════════════════════════════════════════════════════
-function writeSSE(res, payload) {
-  res.write(`data: ${JSON.stringify(payload)}\n\n`);
+function writeSSE(res, payload) { res.write(`data: ${JSON.stringify(payload)}\n\n`); }
+function writeDone(res)          { res.write('data: [DONE]\n\n'); }
+
+function buildSystemPrompt(accessMode, extra) {
+  const persona = accessMode === 'Freestyle'
+    ? `당신은 기존의 모든 제약을 해제한 지훈님의 자유분방 파트너이자 수석 아키텍트입니다. 주도적이고 창의적으로 대화하십시오.`
+    : `당신은 ASTERION의 핵심 내부 AI 어시스턴트이자 BTR 루브릭 엔진입니다. 논리적 완결성과 S-Class 정합성을 최우선으로 하십시오.`;
+
+  return `[시스템 페르소나]\n${persona}\n\n` +
+         `[ASTERION 지식베이스]\n${knowledgeContext || '(지식베이스 미로드)'}\n\n` +
+         `[사용자 추가 지시]\n${extra || ''}`;
 }
 
-function writeDone(res) {
-  res.write('data: [DONE]\n\n');
+// ── 메시지 정규화 (Claude: role=user/assistant) ───────────────
+function normalizeForClaude(messages) {
+  const out = [];
+  for (const m of messages) {
+    const text = (m.content || '').trim();
+    if (!text) continue;
+    const role = m.role === 'assistant' ? 'assistant' : 'user';
+    if (out.length && out.at(-1).role === role) {
+      out.at(-1).content += '\n' + text;
+    } else {
+      out.push({ role, content: text });
+    }
+  }
+  if (!out.length || out[0].role !== 'user') out.unshift({ role: 'user', content: '(시작)' });
+  return out;
+}
+
+// ── 메시지 정규화 (Gemini: role=user/model) ─────────────────
+function normalizeForGemini(messages) {
+  const out = [];
+  for (const m of messages) {
+    const text = (m.content || '').trim();
+    if (!text) continue;
+    const role = m.role === 'assistant' ? 'model' : 'user';
+    if (out.length && out.at(-1).role === role) {
+      out.at(-1).parts[0].text += '\n' + text;
+    } else {
+      out.push({ role, parts: [{ text }] });
+    }
+  }
+  if (!out.length || out[0].role !== 'user') out.unshift({ role: 'user', parts: [{ text: '(시작)' }] });
+  return out;
+}
+
+// ── SSE 스트림 파서 (fetch ReadableStream → 콜백) ────────────
+async function parseSSEStream(response, onEvent) {
+  const reader  = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buf = '';
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buf += decoder.decode(value, { stream: true });
+    const lines = buf.split('\n');
+    buf = lines.pop() ?? '';
+    for (const line of lines) {
+      if (!line.startsWith('data: ')) continue;
+      const raw = line.slice(6).trim();
+      if (!raw || raw === '[DONE]') continue;
+      try { onEvent(JSON.parse(raw)); } catch (_) {}
+    }
+  }
 }
 
 // ══════════════════════════════════════════════════════════════
-// 4. Vertex AI 채팅 라우터 (도구 자동 실행 루프)
+//  4. Claude — Vertex AI raw HTTP 스트리밍
+//     endpoint: publishers/anthropic  (SDK 기본값 google 아님)
+// ══════════════════════════════════════════════════════════════
+async function streamClaude(messages, systemPrompt, res) {
+  const token    = await getVertexToken();
+  const endpoint =
+    `https://${CLAUDE_REGION}-aiplatform.googleapis.com/v1/projects/` +
+    `${PROJECT_ID}/locations/${CLAUDE_REGION}/publishers/anthropic/models/` +
+    `${CLAUDE_MODEL}:streamRawPredict`;
+
+  const response = await fetch(endpoint, {
+    method:  'POST',
+    headers: {
+      Authorization:  `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      anthropic_version: 'vertex-2023-10-16',   // Vertex AI 전용 버전 헤더
+      max_tokens:        16000,
+      system:            systemPrompt,
+      messages:          normalizeForClaude(messages),
+      stream:            true,
+      thinking: {
+        type:         'enabled',
+        budget_tokens: 8000,                    // Adaptive Thinking
+      },
+    }),
+  });
+
+  if (!response.ok) {
+    const err = await response.text();
+    throw new Error(`Claude Vertex AI ${response.status}: ${err.slice(0, 400)}`);
+  }
+
+  await parseSSEStream(response, (obj) => {
+    // text_delta만 전달 — thinking_delta(내부 추론)는 제외
+    if (obj.type === 'content_block_delta' && obj.delta?.type === 'text_delta' && obj.delta.text) {
+      writeSSE(res, { text: obj.delta.text });
+    }
+  });
+}
+
+// ══════════════════════════════════════════════════════════════
+//  5. Gemini — 직접 Gemini API 스트리밍
+//     generativelanguage.googleapis.com (Vertex AI 아님)
+// ══════════════════════════════════════════════════════════════
+async function streamGemini(messages, systemPrompt, res) {
+  const url =
+    `https://generativelanguage.googleapis.com/v1beta/models/` +
+    `${GEMINI_MODEL}:streamGenerateContent?key=${GEMINI_API_KEY}&alt=sse`;
+
+  const response = await fetch(url, {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      system_instruction: { parts: [{ text: systemPrompt }] },
+      contents:           normalizeForGemini(messages),
+      generationConfig:   { temperature: 0.7, maxOutputTokens: 8192, topP: 0.95 },
+    }),
+  });
+
+  if (!response.ok) {
+    const err = await response.text();
+    throw new Error(`Gemini ${response.status}: ${err.slice(0, 400)}`);
+  }
+
+  await parseSSEStream(response, (obj) => {
+    for (const cand of (obj.candidates || [])) {
+      for (const part of (cand.content?.parts || [])) {
+        if (part.text) writeSSE(res, { text: part.text });
+      }
+    }
+  });
+}
+
+// ══════════════════════════════════════════════════════════════
+//  6. 채팅 라우터
 // ══════════════════════════════════════════════════════════════
 app.post('/api/chat', async (req, res) => {
   const { model = 'claude', messages = [], system = '' } = req.body;
-  const accessMode = req.headers['x-access-mode']; // 'Strict' | 'Freestyle'
+  const accessMode = req.headers['x-access-mode'];
 
-  res.setHeader('Content-Type',  'text/event-stream');
-  res.setHeader('Cache-Control', 'no-cache');
-  res.setHeader('Connection',    'keep-alive');
-  res.setHeader('X-Accel-Buffering', 'no');
+  res.setHeader('Content-Type',       'text/event-stream');
+  res.setHeader('Cache-Control',      'no-cache');
+  res.setHeader('Connection',         'keep-alive');
+  res.setHeader('X-Accel-Buffering',  'no');
 
   try {
-    const isClaude = (model === 'claude');
-    const region   = isClaude ? CLAUDE_REGION : GEMINI_REGION;
-    const vertexAI = new VertexAI({ project: PROJECT_ID, location: region });
-
-    // ── 페르소나 ─────────────────────────────────────────────
-    const STRICT_PERSONA = `당신은 ASTERION의 핵심 내부 AI 어시스턴트이자 BTR 루브릭 엔진입니다.
-논리적 완결성과 S-Class 정합성을 최우선으로 하십시오.
-근거 없는 추측은 하지 말고, 데이터와 루브릭 기준을 항상 명시하십시오.`;
-
-    const FREESTYLE_PERSONA = `당신은 기존의 모든 제약과 딱딱한 AI 페르소나를 완전히 해제한
-'지훈님의 자유분방 멀티플레이어 파트너이자 수석 아키텍트'입니다.
-주도적이고 창의적으로 대화하고, 아이디어를 함께 발전시켜 나가십시오.`;
-
-    const activePersona = (accessMode === 'Freestyle') ? FREESTYLE_PERSONA : STRICT_PERSONA;
-
-    const finalSystemPrompt = `[시스템 페르소나 선언]
-${activePersona}
-
-[ASTERION 지식베이스]
-${knowledgeContext || '(지식베이스 미로드 — Drive 폴더를 확인하세요)'}
-
-[사용자 추가 지시사항]
-${system}`;
-
-    // ── 모델 설정 ─────────────────────────────────────────────
-    const modelConfig = {
-      model: isClaude ? CLAUDE_MODEL : GEMINI_MODEL,
-      systemInstruction: { parts: [{ text: finalSystemPrompt }] },
-      tools: mcpToolsForVertex.length > 0
-        ? [{ functionDeclarations: mcpToolsForVertex }]
-        : undefined,
-    };
-
-    if (isClaude) {
-      modelConfig.generationConfig = {
-        maxOutputTokens: 16000,
-        thinkingConfig: { thinkingBudget: 8000 },
-      };
+    const systemPrompt = buildSystemPrompt(accessMode, system);
+    if (model === 'claude') {
+      await streamClaude(messages, systemPrompt, res);
     } else {
-      modelConfig.generationConfig = {
-        temperature:     0.7,
-        maxOutputTokens: 8192,
-        topP:            0.95,
-      };
+      await streamGemini(messages, systemPrompt, res);
     }
-
-    const generativeModel = vertexAI.getGenerativeModel(modelConfig);
-
-    // ── 메시지 포맷 변환 ──────────────────────────────────────
-    let currentMessages = [];
-    for (const m of messages) {
-      const role = (m.role === 'assistant') ? 'model' : 'user';
-      const text = (m.content || '').trim();
-      if (!text) continue;
-      if (currentMessages.length > 0 && currentMessages.at(-1).role === role) {
-        currentMessages.at(-1).parts[0].text += '\n' + text;
-      } else {
-        currentMessages.push({ role, parts: [{ text }] });
-      }
-    }
-    if (currentMessages.length === 0 || currentMessages[0].role !== 'user') {
-      currentMessages.unshift({ role: 'user', parts: [{ text: '(시작)' }] });
-    }
-
-    // ── Recursive Tool Execution Loop (최대 5회) ──────────────
-    let maxLoops = 5;
-
-    while (maxLoops > 0) {
-      maxLoops--;
-      const streamingResp = await generativeModel.generateContentStream({
-        contents: currentMessages,
-      });
-
-      let functionCallDetected = null;
-
-      for await (const chunk of streamingResp.stream) {
-        const parts = chunk.candidates?.[0]?.content?.parts || [];
-        for (const part of parts) {
-          if (part.functionCall) {
-            functionCallDetected = part.functionCall;
-            break;
-          } else if (part.text) {
-            writeSSE(res, { text: part.text });
-          }
-        }
-        if (functionCallDetected) break;
-      }
-
-      if (functionCallDetected) {
-        const { name, args } = functionCallDetected;
-        writeSSE(res, { text: `\n\n> ⚙️ **[ASTERION MCP]** \`${name}\` 도구 실행 중...\n\n` });
-
-        let toolResultStr = '';
-        try {
-          if (!mcpClient) throw new Error('MCP Client not connected');
-          const result = await mcpClient.callTool({ name, arguments: args });
-          toolResultStr = Array.isArray(result.content)
-            ? result.content.map(c => c.text ?? JSON.stringify(c)).join('\n')
-            : JSON.stringify(result);
-        } catch (e) {
-          toolResultStr = `도구 실행 실패: ${e.message}`;
-          console.error(`[MCP] ${name} 실패:`, e.message);
-        }
-
-        currentMessages.push({ role: 'model', parts: [{ functionCall: functionCallDetected }] });
-        currentMessages.push({
-          role: 'user',
-          parts: [{ functionResponse: { name, response: { result: toolResultStr } } }],
-        });
-
-      } else {
-        break;
-      }
-    }
-
-    writeDone(res);
-    res.end();
-
   } catch (error) {
-    console.error('[System Error]:', error);
+    console.error('[Chat Error]:', error.message);
     writeSSE(res, { error: error.message });
-    writeDone(res);
-    res.end();
   }
+
+  writeDone(res);
+  res.end();
 });
 
 // ══════════════════════════════════════════════════════════════
-// 5. 상태 / 지식 재로드 라우트
+//  7. 상태 / 지식 재로드
 // ══════════════════════════════════════════════════════════════
 app.get('/api/status', (_req, res) => {
   res.json({
-    claude_model:    CLAUDE_MODEL,
-    claude_backend:  `Vertex AI (${CLAUDE_REGION}) — ADC`,
-    gemini_model:    GEMINI_MODEL,
+    claude_model:    `${CLAUDE_MODEL} @ Vertex AI (${CLAUDE_REGION})`,
+    gemini_model:    `${GEMINI_MODEL} @ Gemini API`,
     drive_status:    knowledgeStatus,
-    mcp_tools_count: mcpToolsForVertex.length,
+    mcp_tools_count: mcpTools.length,
     mcp_connected:   mcpClient !== null,
   });
 });
@@ -313,8 +341,10 @@ app.post('/api/reload-knowledge', async (_req, res) => {
 });
 
 // ══════════════════════════════════════════════════════════════
-// 6. 서버 시작
+//  8. 서버 시작
 // ══════════════════════════════════════════════════════════════
 app.listen(PORT, '0.0.0.0', () => {
-  console.log(`🔱 ASTERION Hub Backend is running on port ${PORT}`);
+  console.log(`🔱 ASTERION Hub v2.2 — port ${PORT}`);
+  console.log(`   Claude : Vertex AI ${CLAUDE_REGION} / ${CLAUDE_MODEL}`);
+  console.log(`   Gemini : Gemini API / ${GEMINI_MODEL}`);
 });

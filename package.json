@@ -1,16 +1,15 @@
 {
   "name": "asterion-hub-backend",
-  "version": "2.1.0",
-  "description": "ASTERION Hub Chat Backend (Vertex AI + MCP Client)",
+  "version": "2.2.0",
+  "description": "ASTERION Hub Chat Backend (Vertex AI Claude + Gemini API + MCP)",
   "main": "index.js",
   "type": "module",
   "scripts": {
     "start": "node index.js"
   },
   "dependencies": {
-    "express": "^4.19.2",
-    "cors": "^2.8.5",
-    "@google-cloud/vertexai": "^1.9.0",
+    "express":   "^4.19.2",
+    "cors":      "^2.8.5",
     "googleapis": "^140.0.0",
     "@modelcontextprotocol/sdk": "^1.0.1",
     "eventsource": "^2.0.2"
