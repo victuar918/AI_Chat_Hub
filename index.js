@@ -46,7 +46,7 @@ app.get('/', (_req, res) => res.sendFile(join(__dirname, 'static', 'index.html')
 //  상수
 // ══════════════════════════════════════════════════════════════
 const PORT       = process.env.PORT       || 8080;
-const PROJECT_ID = process.env.PROJECT_ID || 'asterion-vedastro-mcp-server';
+const PROJECT_ID = process.env.PROJECT_ID || 'asterion-server';
 
 // Claude: Vertex AI (Anthropic publisher)
 // ⚠️ Claude on Vertex AI 지원 리전: us-east5 / us-central1 / europe-west1 / asia-southeast1
