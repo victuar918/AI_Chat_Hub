@@ -31,3 +31,7 @@ steps:
 # 빌드된 이미지 보관
 images:
   - 'gcr.io/$PROJECT_ID/ai-chat-hub:$COMMIT_SHA'
+
+# 서비스 계정 지정 시 필수 — 로그 정책 명시
+options:
+  logging: CLOUD_LOGGING_ONLY
