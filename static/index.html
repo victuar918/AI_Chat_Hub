@@ -1,0 +1,65 @@
+<!-- ══ TOP BAR ══ -->
+<div id="topbar">
+  <div class="logo">ASTERION<span>HUB</span></div>
+  <div class="model-toggle">
+    <!-- 🎭 모드 토글 버튼 추가 -->
+    <button class="mb" id="b-mode" onclick="togglePersona()" style="margin-right:10px; border-color:var(--red); color:var(--tx2);">STRICT</button>
+    <button class="mb" id="b-claude" onclick="setModel('claude')">CLAUDE</button>
+    <button class="mb" id="b-gemini" onclick="setModel('gemini')">GEMINI</button>
+  </div>
+</div>
+
+<!-- ... (중간 HTML 구조 동일) ... -->
+
+<script>
+const S = {
+  model: 'claude',
+  mode: 'Strict', // 기본은 Strict 모드
+  messages: [],
+  streaming: false,
+};
+
+function togglePersona() {
+  S.mode = S.mode === 'Strict' ? 'Freestyle' : 'Strict';
+  const btn = document.getElementById('b-mode');
+  btn.textContent = S.mode.toUpperCase();
+  if (S.mode === 'Freestyle') {
+    btn.style.borderColor = 'var(--gold)';
+    btn.style.color = 'var(--gold)';
+    toast('🚀 자유분방 수석 아키텍트 모드 활성화');
+  } else {
+    btn.style.borderColor = 'var(--red)';
+    btn.style.color = 'var(--tx2)';
+    toast('⚖️ ASTERION 엄격 통제 모드 복귀');
+  }
+}
+
+// ... (다른 함수들 유지) ...
+
+async function streamAI() {
+  S.streaming = true;
+  document.getElementById('send').disabled = true;
+
+  const aiEl = appendMsg('assistant', '', true);
+  const contEl = aiEl.querySelector('.content');
+  contEl.classList.add('cur');
+  contEl.innerHTML = '<div class="thinking"><span></span><span></span><span></span></div>';
+
+  const sys = document.getElementById('sys-ta').value;
+
+  try {
+    const res = await fetch('/api/chat', {
+      method:  'POST',
+      headers: { 
+        'Content-Type': 'application/json',
+        'x-access-mode': S.mode  // 🎭 백엔드로 현재 모드 전송
+      },
+      body: JSON.stringify({
+        model: S.model,
+        messages: S.messages.slice(-30), // 최적화: 최근 30개 메시지만 전송
+        system: sys,
+      }),
+    });
+
+// ... (이하 streamAI 나머지 코드 동일) ...
+
