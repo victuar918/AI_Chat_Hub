@@ -1,65 +1,771 @@
-<!-- ══ TOP BAR ══ -->
-<div id="topbar">
-  <div class="logo">ASTERION<span>HUB</span></div>
-  <div class="model-toggle">
-    <!-- 🎭 모드 토글 버튼 추가 -->
-    <button class="mb" id="b-mode" onclick="togglePersona()" style="margin-right:10px; border-color:var(--red); color:var(--tx2);">STRICT</button>
-    <button class="mb" id="b-claude" onclick="setModel('claude')">CLAUDE</button>
-    <button class="mb" id="b-gemini" onclick="setModel('gemini')">GEMINI</button>
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>ASTERION HUB</title>
+<style>
+/* ════════════════════════════════════════════════
+   ASTERION HUB — Design System
+   Black & Gold / Dark Theme
+════════════════════════════════════════════════ */
+:root {
+  --bg0  : #080604;
+  --bg1  : #0f0c08;
+  --bg2  : #181410;
+  --bg3  : #221d17;
+  --gold : #c9a96e;
+  --gold2: #e8d5a3;
+  --gold3: #8b6914;
+  --red  : #a05050;
+  --tx1  : #e8d5a3;
+  --tx2  : #9a8870;
+  --tx3  : #5a4e40;
+  --bdr  : rgba(201,169,110,.18);
+  --glow : rgba(201,169,110,.08);
+  --r    : 6px;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  height: 100%;
+  background: var(--bg0);
+  color: var(--tx1);
+  font-family: 'Segoe UI', system-ui, sans-serif;
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+/* ── 스크롤바 ───────────────────────────────── */
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--bdr); border-radius: 2px; }
+
+/* ════════════════════════════════════════════
+   LAYOUT
+════════════════════════════════════════════ */
+#app {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  max-width: 900px;
+  margin: 0 auto;
+}
+
+/* ── TOP BAR ────────────────────────────────── */
+#topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 20px;
+  background: var(--bg1);
+  border-bottom: 1px solid var(--bdr);
+  flex-shrink: 0;
+}
+
+.logo {
+  font-family: 'Cinzel', 'Trajan Pro', serif;
+  font-size: 16px;
+  letter-spacing: 4px;
+  color: var(--gold);
+  font-weight: 600;
+  user-select: none;
+}
+.logo span {
+  color: var(--tx2);
+  font-weight: 300;
+  margin-left: 2px;
+}
+
+.model-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* ── 공통 버튼 ─────────────────────────────── */
+.mb {
+  background: transparent;
+  border: 1px solid var(--bdr);
+  color: var(--tx2);
+  padding: 5px 14px;
+  border-radius: var(--r);
+  font-size: 11px;
+  letter-spacing: 1.5px;
+  cursor: pointer;
+  transition: all .2s;
+  font-weight: 600;
+}
+.mb:hover { border-color: var(--gold); color: var(--gold); }
+.mb.active {
+  background: var(--gold);
+  border-color: var(--gold);
+  color: var(--bg0);
+}
+
+/* ── SYSTEM PANEL ───────────────────────────── */
+#sys-panel {
+  background: var(--bg1);
+  border-bottom: 1px solid var(--bdr);
+  padding: 10px 20px;
+  flex-shrink: 0;
+}
+.sys-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+.sys-label {
+  font-size: 10px;
+  letter-spacing: 2px;
+  color: var(--tx3);
+  font-weight: 600;
+}
+#sys-toggle {
+  font-size: 10px;
+  color: var(--tx3);
+  cursor: pointer;
+  letter-spacing: 1px;
+  border: none;
+  background: none;
+  transition: color .2s;
+}
+#sys-toggle:hover { color: var(--gold); }
+
+#sys-ta {
+  width: 100%;
+  background: var(--bg2);
+  border: 1px solid var(--bdr);
+  border-radius: var(--r);
+  color: var(--tx2);
+  font-size: 12px;
+  padding: 8px 12px;
+  resize: vertical;
+  min-height: 50px;
+  max-height: 160px;
+  outline: none;
+  font-family: inherit;
+  transition: border-color .2s;
+}
+#sys-ta:focus { border-color: var(--gold3); }
+#sys-ta::placeholder { color: var(--tx3); }
+
+/* ── CHAT AREA ──────────────────────────────── */
+#chat {
+  flex: 1;
+  overflow-y: auto;
+  padding: 24px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+/* ── MESSAGE ────────────────────────────────── */
+.msg {
+  display: flex;
+  gap: 12px;
+  animation: fadeIn .25s ease;
+}
+@keyframes fadeIn { from { opacity:0; transform:translateY(4px); } to { opacity:1; } }
+
+.msg.user { flex-direction: row-reverse; }
+
+.avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0;
+}
+.msg.user .avatar {
+  background: var(--bg3);
+  border: 1px solid var(--bdr);
+  color: var(--tx2);
+}
+.msg.assistant .avatar {
+  background: linear-gradient(135deg, #1a1208, #2a1e08);
+  border: 1px solid var(--gold3);
+  color: var(--gold);
+  font-size: 11px;
+  letter-spacing: .5px;
+}
+
+.bubble-wrap { max-width: 78%; display: flex; flex-direction: column; }
+.msg.user .bubble-wrap { align-items: flex-end; }
+
+.role-label {
+  font-size: 10px;
+  letter-spacing: 1.5px;
+  color: var(--tx3);
+  margin-bottom: 4px;
+  font-weight: 600;
+}
+
+.content {
+  background: var(--bg2);
+  border: 1px solid var(--bdr);
+  border-radius: var(--r);
+  padding: 12px 16px;
+  color: var(--tx1);
+  line-height: 1.75;
+  word-break: break-word;
+  white-space: pre-wrap;
+}
+.msg.user .content {
+  background: var(--bg3);
+  border-color: rgba(201,169,110,.12);
+  color: var(--tx2);
+}
+.msg.assistant .content {
+  border-color: var(--bdr);
+}
+
+/* 마크다운 스타일링 */
+.content strong { color: var(--gold2); font-weight: 600; }
+.content em { color: var(--tx2); font-style: italic; }
+.content code {
+  background: var(--bg0);
+  border: 1px solid var(--bdr);
+  border-radius: 3px;
+  padding: 1px 6px;
+  font-family: 'JetBrains Mono', 'Courier New', monospace;
+  font-size: .88em;
+  color: var(--gold);
+}
+.content pre {
+  background: var(--bg0);
+  border: 1px solid var(--bdr);
+  border-radius: var(--r);
+  padding: 12px 14px;
+  overflow-x: auto;
+  margin: 8px 0;
+}
+.content pre code {
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: .85em;
+  color: var(--tx1);
+}
+.content blockquote {
+  border-left: 2px solid var(--gold3);
+  padding: 4px 12px;
+  margin: 6px 0;
+  color: var(--tx2);
+  font-style: italic;
+}
+.content h1,.content h2,.content h3 {
+  color: var(--gold2);
+  margin: 8px 0 4px;
+  font-size: 1em;
+  letter-spacing: .5px;
+}
+.content ul,.content ol { padding-left: 20px; margin: 4px 0; }
+.content li { margin: 2px 0; }
+.content a { color: var(--gold); text-decoration: underline; }
+.content hr { border: none; border-top: 1px solid var(--bdr); margin: 8px 0; }
+.content table { border-collapse: collapse; width: 100%; margin: 8px 0; font-size: .9em; }
+.content th { background: var(--bg3); color: var(--gold2); padding: 6px 10px; border: 1px solid var(--bdr); text-align: left; }
+.content td { padding: 6px 10px; border: 1px solid var(--bdr); color: var(--tx2); }
+
+/* 커서 깜빡임 */
+.cur::after {
+  content: '▋';
+  color: var(--gold);
+  animation: blink .8s step-end infinite;
+}
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }
+
+/* 생각 중 점 애니메이션 */
+.thinking {
+  display: flex;
+  gap: 5px;
+  align-items: center;
+  padding: 4px 0;
+}
+.thinking span {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--gold3);
+  animation: dot .9s ease-in-out infinite;
+}
+.thinking span:nth-child(2) { animation-delay: .2s; }
+.thinking span:nth-child(3) { animation-delay: .4s; }
+@keyframes dot { 0%,60%,100%{transform:scale(.7);opacity:.4} 30%{transform:scale(1);opacity:1} }
+
+/* ── INPUT BAR ──────────────────────────────── */
+#inputbar {
+  padding: 14px 20px;
+  background: var(--bg1);
+  border-top: 1px solid var(--bdr);
+  display: flex;
+  gap: 10px;
+  align-items: flex-end;
+  flex-shrink: 0;
+}
+
+#inp {
+  flex: 1;
+  background: var(--bg2);
+  border: 1px solid var(--bdr);
+  border-radius: var(--r);
+  color: var(--tx1);
+  font-size: 14px;
+  padding: 10px 14px;
+  resize: none;
+  outline: none;
+  min-height: 44px;
+  max-height: 200px;
+  font-family: inherit;
+  line-height: 1.6;
+  overflow-y: auto;
+  transition: border-color .2s;
+}
+#inp:focus { border-color: var(--gold3); }
+#inp::placeholder { color: var(--tx3); }
+
+#send {
+  background: linear-gradient(135deg, var(--gold3), var(--gold));
+  border: none;
+  border-radius: var(--r);
+  width: 44px;
+  height: 44px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: opacity .2s;
+}
+#send:disabled { opacity: .35; cursor: not-allowed; }
+#send:not(:disabled):hover { opacity: .85; }
+#send svg { fill: var(--bg0); }
+
+/* ── STATUS BAR ─────────────────────────────── */
+#statusbar {
+  text-align: center;
+  padding: 5px;
+  font-size: 10px;
+  letter-spacing: 1px;
+  color: var(--tx3);
+  background: var(--bg0);
+  border-top: 1px solid rgba(201,169,110,.06);
+  flex-shrink: 0;
+}
+
+/* ── TOAST ──────────────────────────────────── */
+#toast {
+  position: fixed;
+  bottom: 80px;
+  left: 50%;
+  transform: translateX(-50%) translateY(10px);
+  background: var(--bg3);
+  border: 1px solid var(--bdr);
+  color: var(--tx1);
+  padding: 8px 20px;
+  border-radius: 20px;
+  font-size: 12px;
+  opacity: 0;
+  pointer-events: none;
+  transition: all .3s;
+  white-space: nowrap;
+  z-index: 999;
+}
+#toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+/* ── MODE BADGE ─────────────────────────────── */
+#mode-badge {
+  position: fixed;
+  top: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 9px;
+  letter-spacing: 2px;
+  color: var(--tx3);
+  pointer-events: none;
+}
+
+/* ── EMPTY STATE ────────────────────────────── */
+#empty {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  color: var(--tx3);
+  pointer-events: none;
+  user-select: none;
+}
+.empty-symbol { font-size: 28px; opacity: .4; }
+.empty-text { font-size: 11px; letter-spacing: 3px; opacity: .5; }
+
+/* ── CTRL BAR ───────────────────────────────── */
+#ctrlbar {
+  display: flex;
+  gap: 6px;
+  padding: 0 20px 10px;
+  background: var(--bg1);
+  flex-shrink: 0;
+}
+.ctrl-btn {
+  background: transparent;
+  border: 1px solid var(--bdr);
+  color: var(--tx3);
+  padding: 4px 10px;
+  border-radius: 4px;
+  font-size: 10px;
+  letter-spacing: 1px;
+  cursor: pointer;
+  transition: all .2s;
+}
+.ctrl-btn:hover { border-color: var(--gold3); color: var(--tx2); }
+</style>
+</head>
+<body>
+<div id="app">
+
+  <!-- ══ TOP BAR ══ -->
+  <div id="topbar">
+    <div class="logo">ASTERION<span>HUB</span></div>
+    <div class="model-toggle">
+      <button class="mb" id="b-mode" onclick="togglePersona()" style="border-color:var(--red);color:var(--red);">STRICT</button>
+      <button class="mb active" id="b-claude" onclick="setModel('claude')">CLAUDE</button>
+      <button class="mb" id="b-gemini" onclick="setModel('gemini')">GEMINI</button>
+    </div>
   </div>
+
+  <!-- ══ SYSTEM PANEL ══ -->
+  <div id="sys-panel">
+    <div class="sys-header">
+      <span class="sys-label">SYSTEM INSTRUCTION</span>
+      <button id="sys-toggle" onclick="toggleSys()">▼ 접기</button>
+    </div>
+    <textarea id="sys-ta" rows="2"
+      placeholder="시스템 지시사항 (선택 사항) — BTR 루브릭, 특정 분석 방식 등을 지정하세요."></textarea>
+  </div>
+
+  <!-- ══ CTRL BAR ══ -->
+  <div id="ctrlbar">
+    <button class="ctrl-btn" onclick="clearChat()">✕ 대화 초기화</button>
+    <button class="ctrl-btn" onclick="checkStatus()">◎ 서버 상태</button>
+    <button class="ctrl-btn" onclick="reloadKnowledge()">↺ 지식 재로드</button>
+  </div>
+
+  <!-- ══ CHAT ══ -->
+  <div id="chat">
+    <div id="empty">
+      <div class="empty-symbol">✦</div>
+      <div class="empty-text">ASTERION HUB</div>
+    </div>
+  </div>
+
+  <!-- ══ INPUT BAR ══ -->
+  <div id="inputbar">
+    <textarea id="inp" rows="1"
+      placeholder="메시지를 입력하세요... (Shift+Enter: 줄바꿈)"
+      onkeydown="handleKey(event)"
+      oninput="autoResize(this)"></textarea>
+    <button id="send" onclick="send()" title="전송">
+      <svg width="18" height="18" viewBox="0 0 24 24">
+        <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
+      </svg>
+    </button>
+  </div>
+
+  <!-- ══ STATUS BAR ══ -->
+  <div id="statusbar" id="statusbar">ASTERION HUB · VERTEX AI</div>
+
 </div>
 
-<!-- ... (중간 HTML 구조 동일) ... -->
+<!-- TOAST -->
+<div id="toast"></div>
+
+<!-- ════════════════════════════════════════════
+     MARKED.JS (마크다운 렌더링)
+════════════════════════════════════════════ -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/9.1.6/marked.min.js"></script>
 
 <script>
+/* ════════════════════════════════════════════════════════════
+   ASTERION HUB — Frontend Logic
+════════════════════════════════════════════════════════════ */
+
+// ── marked.js 설정 ────────────────────────────────────────
+if (typeof marked !== 'undefined') {
+  marked.setOptions({ breaks: true, gfm: true });
+}
+
+// ── 전역 상태 ────────────────────────────────────────────
 const S = {
-  model: 'claude',
-  mode: 'Strict', // 기본은 Strict 모드
-  messages: [],
+  model:     'claude',
+  mode:      'Strict',   // 'Strict' | 'Freestyle'
+  messages:  [],
   streaming: false,
+  sysOpen:   true,
 };
 
+// ── 모드 토글 ──────────────────────────────────────────
 function togglePersona() {
-  S.mode = S.mode === 'Strict' ? 'Freestyle' : 'Strict';
+  S.mode = (S.mode === 'Strict') ? 'Freestyle' : 'Strict';
   const btn = document.getElementById('b-mode');
   btn.textContent = S.mode.toUpperCase();
   if (S.mode === 'Freestyle') {
     btn.style.borderColor = 'var(--gold)';
-    btn.style.color = 'var(--gold)';
+    btn.style.color       = 'var(--gold)';
     toast('🚀 자유분방 수석 아키텍트 모드 활성화');
   } else {
     btn.style.borderColor = 'var(--red)';
-    btn.style.color = 'var(--tx2)';
+    btn.style.color       = 'var(--red)';
     toast('⚖️ ASTERION 엄격 통제 모드 복귀');
+  }
+  updateStatus();
+}
+
+// ── 모델 선택 ──────────────────────────────────────────
+function setModel(m) {
+  S.model = m;
+  document.getElementById('b-claude').classList.toggle('active', m === 'claude');
+  document.getElementById('b-gemini').classList.toggle('active', m === 'gemini');
+  toast(`${m === 'claude' ? '🔱 Claude Sonnet 4.6' : '⚡ Gemini 3.1 Pro Preview'} 선택됨`);
+  updateStatus();
+}
+
+// ── 시스템 패널 접기/펼치기 ───────────────────────────
+function toggleSys() {
+  S.sysOpen = !S.sysOpen;
+  const ta  = document.getElementById('sys-ta');
+  const btn = document.getElementById('sys-toggle');
+  ta.style.display  = S.sysOpen ? '' : 'none';
+  btn.textContent   = S.sysOpen ? '▼ 접기' : '▶ 펼치기';
+}
+
+// ── textarea 자동 높이 ────────────────────────────────
+function autoResize(el) {
+  el.style.height = 'auto';
+  el.style.height = Math.min(el.scrollHeight, 200) + 'px';
+}
+
+// ── 키 핸들러 ─────────────────────────────────────────
+function handleKey(e) {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    send();
   }
 }
 
-// ... (다른 함수들 유지) ...
+// ── 상태바 업데이트 ───────────────────────────────────
+function updateStatus(text) {
+  const m = S.model === 'claude' ? 'CLAUDE SONNET 4.6' : 'GEMINI 3.1 PRO';
+  const mode = S.mode.toUpperCase();
+  document.getElementById('statusbar').textContent =
+    text || `${m} · ${mode} MODE · VERTEX AI (asia-northeast3)`;
+}
 
+// ── TOAST ─────────────────────────────────────────────
+let _toastTimer = null;
+function toast(msg, dur = 2800) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(_toastTimer);
+  _toastTimer = setTimeout(() => el.classList.remove('show'), dur);
+}
+
+// ── 메시지 DOM 추가 ───────────────────────────────────
+function appendMsg(role, text = '', streaming = false) {
+  // 빈 상태 제거
+  const empty = document.getElementById('empty');
+  if (empty) empty.remove();
+
+  const chat = document.getElementById('chat');
+  const div  = document.createElement('div');
+  div.className = `msg ${role}`;
+
+  const isAI = role === 'assistant';
+  const modelLabel = S.model === 'claude' ? 'AI' : 'GEM';
+
+  div.innerHTML = `
+    <div class="avatar">${isAI ? modelLabel : 'YOU'}</div>
+    <div class="bubble-wrap">
+      <div class="role-label">${isAI ? (S.model === 'claude' ? 'CLAUDE' : 'GEMINI') : 'USER'}</div>
+      <div class="content">${streaming ? '' : renderText(text)}</div>
+    </div>`;
+
+  chat.appendChild(div);
+  chat.scrollTop = chat.scrollHeight;
+  return div;
+}
+
+// ── 마크다운 렌더링 ───────────────────────────────────
+function renderText(text) {
+  if (!text) return '';
+  if (typeof marked !== 'undefined') {
+    try { return marked.parse(text); } catch (_) {}
+  }
+  return text.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// ── 대화 초기화 ───────────────────────────────────────
+function clearChat() {
+  if (S.streaming) { toast('⚠️ 스트리밍 중에는 초기화할 수 없습니다.'); return; }
+  S.messages = [];
+  const chat = document.getElementById('chat');
+  chat.innerHTML = `
+    <div id="empty">
+      <div class="empty-symbol">✦</div>
+      <div class="empty-text">ASTERION HUB</div>
+    </div>`;
+  toast('대화 기록이 초기화됐습니다.');
+}
+
+// ── 서버 상태 확인 ────────────────────────────────────
+async function checkStatus() {
+  try {
+    const res  = await fetch('/api/status');
+    const data = await res.json();
+    const msg  = `모델: ${data.claude_model} | 드라이브: ${data.drive_status} | MCP: ${data.mcp_tools_count}개 도구`;
+    toast(`✅ ${msg}`, 4000);
+    updateStatus(msg);
+  } catch (e) {
+    toast(`❌ 서버 연결 실패: ${e.message}`);
+  }
+}
+
+// ── 지식베이스 재로드 ─────────────────────────────────
+async function reloadKnowledge() {
+  toast('↺ 지식베이스 재로드 중...');
+  try {
+    const res  = await fetch('/api/reload-knowledge', { method: 'POST' });
+    const data = await res.json();
+    toast(`✅ ${data.status}`);
+  } catch (e) {
+    toast(`❌ 재로드 실패: ${e.message}`);
+  }
+}
+
+// ══════════════════════════════════════════════════════
+// 메인 전송 함수
+// ══════════════════════════════════════════════════════
+async function send() {
+  if (S.streaming) return;
+
+  const inp  = document.getElementById('inp');
+  const text = inp.value.trim();
+  if (!text) return;
+
+  // 사용자 메시지 추가
+  inp.value = '';
+  inp.style.height = 'auto';
+  S.messages.push({ role: 'user', content: text });
+  appendMsg('user', text);
+
+  await streamAI();
+}
+
+// ── SSE 스트리밍 ──────────────────────────────────────
 async function streamAI() {
   S.streaming = true;
   document.getElementById('send').disabled = true;
+  updateStatus('⟳ 응답 생성 중...');
 
-  const aiEl = appendMsg('assistant', '', true);
+  // AI 버블 생성 (로딩 상태)
+  const aiEl   = appendMsg('assistant', '', true);
   const contEl = aiEl.querySelector('.content');
   contEl.classList.add('cur');
   contEl.innerHTML = '<div class="thinking"><span></span><span></span><span></span></div>';
 
   const sys = document.getElementById('sys-ta').value;
+  let   fullText = '';
 
   try {
     const res = await fetch('/api/chat', {
       method:  'POST',
-      headers: { 
-        'Content-Type': 'application/json',
-        'x-access-mode': S.mode  // 🎭 백엔드로 현재 모드 전송
+      headers: {
+        'Content-Type':  'application/json',
+        'x-access-mode': S.mode,   // 'Strict' | 'Freestyle'
       },
       body: JSON.stringify({
-        model: S.model,
-        messages: S.messages.slice(-30), // 최적화: 최근 30개 메시지만 전송
-        system: sys,
+        model:    S.model,
+        messages: S.messages.slice(-30),  // 최근 30개만 전송 (컨텍스트 최적화)
+        system:   sys,
       }),
     });
 
-// ... (이하 streamAI 나머지 코드 동일) ...
+    if (!res.ok) {
+      throw new Error(`HTTP ${res.status} — ${res.statusText}`);
+    }
 
+    const reader  = res.body.getReader();
+    const decoder = new TextDecoder();
+    let   buffer  = '';
+    let   firstChunk = true;
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop(); // 마지막 미완성 줄 보존
+
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed.startsWith('data:')) continue;
+        const raw = trimmed.slice(5).trim();
+        if (raw === '[DONE]') continue;
+
+        let obj;
+        try { obj = JSON.parse(raw); } catch (_) { continue; }
+
+        if (obj.error) {
+          contEl.classList.remove('cur');
+          contEl.innerHTML = `<span style="color:var(--red)">⚠️ ${obj.error}</span>`;
+          throw new Error(obj.error);
+        }
+
+        if (obj.text) {
+          // 첫 청크가 오면 로딩 애니메이션 제거
+          if (firstChunk) {
+            contEl.innerHTML = '';
+            firstChunk = false;
+          }
+          fullText += obj.text;
+          contEl.innerHTML = renderText(fullText);
+          // 스크롤 하단 유지
+          const chat = document.getElementById('chat');
+          chat.scrollTop = chat.scrollHeight;
+        }
+      }
+    }
+
+  } catch (e) {
+    console.error('[streamAI]', e);
+    if (fullText === '') {
+      contEl.innerHTML = `<span style="color:var(--red)">⚠️ 오류: ${e.message}</span>`;
+    }
+  } finally {
+    contEl.classList.remove('cur');
+    // 최종 텍스트 저장
+    if (fullText) {
+      S.messages.push({ role: 'assistant', content: fullText });
+    }
+    S.streaming = false;
+    document.getElementById('send').disabled = false;
+    updateStatus();
+  }
+}
+
+// ── 초기화 ────────────────────────────────────────────
+updateStatus();
+</script>
+</body>
+</html>
