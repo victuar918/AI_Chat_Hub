@@ -1,0 +1,27 @@
+steps:
+1. Docker 이미지 빌드 (커밋 해시를 태그로 사용하여 버전 관리)
+• name: 'gcr.io/cloud-builders/docker'
+• args: ['build', '-t', 'gcr.io/COMMIT_SHA', '.']
+
+2. Google Container Registry에 이미지 푸시
+• name: 'gcr.io/cloud-builders/docker'
+• args: ['push', 'gcr.io/COMMIT_SHA']
+
+3. Cloud Run에 최신 이미지 배포
+• name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+entrypoint: gcloud
+args: 
+◦ 'run'
+◦ 'deploy'
+◦ 'ai-chat-hub' # Cloud Run 서비스 이름
+◦ '--image'
+◦ 'gcr.io/COMMIT_SHA'
+◦ '--region'
+◦ 'asia-northeast3'
+◦ '--platform'
+◦ 'managed'
+◦ '--allow-unauthenticated'
+
+빌드된 이미지를 보관하도록 명시
+images:
+• 'gcr.io/COMMIT_SHA'
