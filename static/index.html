@@ -10,424 +10,186 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/9.1.6/marked.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
 <style>
-/* ─── 토큰 ─────────────────────────────── */
 :root{
-  --gold:     #c9a96e;
-  --gold-lt:  #e8d5a3;
-  --gold-a:   rgba(201,169,110,.14);
-  --gold-b:   rgba(201,169,110,.07);
-  --bg:       #080604;
-  --bg1:      #0e0b07;
-  --bg2:      #161210;
-  --bg3:      #1e1a14;
-  --bdr:      rgba(201,169,110,.20);
-  --bdr2:     rgba(201,169,110,.09);
-  --tx:       #ddd0b8;
-  --tx2:      #a08c6e;
-  --tx3:      #6b5c44;
-  --green:    #5a8a6a;
-  --red:      #9a5040;
-  --top-h:    52px;
+  --gold:#c9a96e;--gold-lt:#e8d5a3;--gold-a:rgba(201,169,110,.14);
+  --gold-b:rgba(201,169,110,.07);--bg:#080604;--bg1:#0e0b07;
+  --bg2:#161210;--bg3:#1e1a14;--bdr:rgba(201,169,110,.20);
+  --bdr2:rgba(201,169,110,.09);--tx:#ddd0b8;--tx2:#a08c6e;
+  --tx3:#6b5c44;--green:#5a8a6a;--red:#9a5040;
+  --gpt-c:rgba(16,163,127,.18);--gpt-border:rgba(16,163,127,.35);
 }
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 html{-webkit-text-size-adjust:100%}
-body{
-  height:100dvh;background:var(--bg);color:var(--tx);
-  font-family:'Noto Sans KR',sans-serif;font-size:14px;
-  line-height:1.75;display:flex;flex-direction:column;overflow:hidden;
-}
+body{height:100dvh;background:var(--bg);color:var(--tx);
+  font-family:'Noto Sans KR',sans-serif;font-size:14px;line-height:1.75;
+  display:flex;flex-direction:column;overflow:hidden;}
 ::-webkit-scrollbar{width:3px}
 ::-webkit-scrollbar-track{background:transparent}
 ::-webkit-scrollbar-thumb{background:rgba(201,169,110,.18);border-radius:2px}
 
-/* ─── TOP BAR ──────────────────────────── */
-#topbar{
-  height:var(--top-h);background:var(--bg1);
-  border-bottom:1px solid var(--bdr);
+/* ── TOP BAR ── */
+#topbar{height:52px;background:var(--bg1);border-bottom:1px solid var(--bdr);
   display:flex;align-items:center;justify-content:space-between;
-  padding:0 14px;flex-shrink:0;gap:10px;
-}
-.logo{font-family:'Cinzel',serif;font-size:15px;letter-spacing:4px;color:var(--gold);white-space:nowrap}
+  padding:0 14px;flex-shrink:0;gap:8px;}
+.logo{font-family:'Cinzel',serif;font-size:14px;letter-spacing:4px;color:var(--gold);white-space:nowrap}
 .logo span{font-size:9px;letter-spacing:2px;color:var(--tx3);display:block;margin-top:-2px}
 
-/* 모델 토글 */
-.mtog{
-  display:flex;background:var(--bg2);border:1px solid var(--bdr);
-  border-radius:20px;padding:3px;gap:2px;flex-shrink:0;
-}
-.mb{
-  font-family:'Cinzel',serif;font-size:10px;letter-spacing:1.5px;
-  padding:5px 12px;border-radius:16px;border:none;background:transparent;
-  color:var(--tx3);cursor:pointer;transition:all .18s;white-space:nowrap;
-}
-.mb.on{background:var(--gold-a);color:var(--gold);border:1px solid rgba(201,169,110,.28)}
+/* 3모델 토글 */
+.mtog{display:flex;background:var(--bg2);border:1px solid var(--bdr);
+  border-radius:20px;padding:3px;gap:2px;flex-shrink:0;}
+.mb{font-family:'Cinzel',serif;font-size:9px;letter-spacing:1px;
+  padding:5px 10px;border-radius:16px;border:none;background:transparent;
+  color:var(--tx3);cursor:pointer;transition:all .18s;white-space:nowrap;}
+.mb:hover{color:var(--tx2)}
+.mb.on-claude{background:var(--gold-a);color:var(--gold);border:1px solid rgba(201,169,110,.28)}
+.mb.on-gemini{background:rgba(74,172,170,.14);color:rgba(74,212,210,.9);border:1px solid rgba(74,172,170,.3)}
+.mb.on-gpt{background:var(--gpt-c);color:rgba(16,163,127,.95);border:1px solid var(--gpt-border)}
 
-/* ─── MESSAGES ─────────────────────────── */
+/* ── MESSAGES ── */
 #msgs{flex:1;overflow-y:auto;padding:16px 0 8px;-webkit-overflow-scrolling:touch}
 
-/* 빈 상태 */
-#empty{
-  display:flex;flex-direction:column;align-items:center;
-  justify-content:center;min-height:100%;gap:12px;padding:40px 20px;
-}
+#empty{display:flex;flex-direction:column;align-items:center;
+  justify-content:center;min-height:100%;gap:12px;padding:40px 20px;}
 .e-star{font-family:'Cinzel',serif;font-size:26px;letter-spacing:6px;color:rgba(201,169,110,.18)}
 .e-name{font-family:'Cinzel',serif;font-size:9px;letter-spacing:4px;color:rgba(201,169,110,.13)}
 .chips{display:flex;flex-wrap:wrap;gap:7px;justify-content:center;max-width:480px;margin-top:8px}
-.chip{
-  background:var(--bg2);border:1px solid var(--bdr2);border-radius:20px;
-  padding:7px 14px;font-size:12px;color:var(--tx3);cursor:pointer;transition:all .18s;
-}
+.chip{background:var(--bg2);border:1px solid var(--bdr2);border-radius:20px;
+  padding:7px 14px;font-size:12px;color:var(--tx3);cursor:pointer;transition:all .18s;}
 .chip:active{background:var(--bg3);color:var(--tx2);border-color:var(--bdr)}
 
 /* 메시지 행 */
-.row{
-  padding:10px 14px;display:flex;gap:10px;
-  max-width:720px;margin:0 auto;width:100%;animation:fi .18s ease;
-}
+.row{padding:10px 14px;display:flex;gap:10px;max-width:720px;margin:0 auto;width:100%;animation:fi .18s ease}
 @keyframes fi{from{opacity:0;transform:translateY(3px)}to{opacity:1}}
-.av{
-  width:26px;height:26px;border-radius:50%;display:flex;
-  align-items:center;justify-content:center;font-size:11px;
-  flex-shrink:0;margin-top:3px;
-}
+.av{width:26px;height:26px;border-radius:50%;display:flex;align-items:center;
+  justify-content:center;font-size:11px;flex-shrink:0;margin-top:3px;}
 .av.u{background:var(--bg3);border:1px solid var(--bdr2);color:var(--tx2);font-family:'Cinzel',serif}
-.av.a{background:var(--gold-a);border:1px solid rgba(201,169,110,.25)}
+.av.a-claude{background:var(--gold-a);border:1px solid rgba(201,169,110,.25)}
+.av.a-gemini{background:rgba(74,172,170,.14);border:1px solid rgba(74,172,170,.3)}
+.av.a-gpt{background:var(--gpt-c);border:1px solid var(--gpt-border)}
 .mb2{flex:1;min-width:0}
 .meta{display:flex;gap:8px;align-items:center;margin-bottom:4px}
 .who{font-family:'Cinzel',serif;font-size:9px;letter-spacing:2px}
-.who.u{color:var(--tx3)}.who.a{color:var(--gold)}
+.who.u{color:var(--tx3)}.who.claude{color:var(--gold)}
+.who.gemini{color:rgba(74,212,210,.9)}.who.gpt{color:rgba(16,163,127,.95)}
 .ts{font-size:10px;color:var(--tx3);font-family:'JetBrains Mono',monospace}
 .cnt{color:var(--tx)}.cnt.u{color:var(--tx2)}
 
-/* 도구 체이닝 표시 (compact pills) */
+/* 도구 체이닝 pills */
 .tool-pills{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:8px}
-.tpill{
-  display:flex;align-items:center;gap:4px;
-  background:var(--bg3);border:1px solid var(--bdr2);
-  border-radius:10px;padding:3px 8px;
-  font-size:10px;color:var(--tx3);font-family:'JetBrains Mono',monospace;
-  transition:all .2s;
-}
+.tpill{display:flex;align-items:center;gap:4px;background:var(--bg3);
+  border:1px solid var(--bdr2);border-radius:10px;padding:3px 8px;
+  font-size:10px;color:var(--tx3);font-family:'JetBrains Mono',monospace;transition:all .2s;}
 .tpill.done{border-color:rgba(90,138,106,.4);color:var(--green)}
 .tpill.err{border-color:rgba(154,80,64,.4);color:var(--red)}
-.tpill .ti{font-size:9px}
 
 /* 마크다운 */
 .cnt h1,.cnt h2,.cnt h3{font-family:'Cinzel',serif;color:var(--gold);margin:14px 0 6px;letter-spacing:1px}
 .cnt h1{font-size:16px}.cnt h2{font-size:14px;border-bottom:1px solid var(--bdr2);padding-bottom:4px}.cnt h3{font-size:13px}
-.cnt p{margin:7px 0}
-.cnt strong{color:var(--gold-lt);font-weight:600}
-.cnt em{color:var(--tx2)}
-.cnt code{
-  font-family:'JetBrains Mono',monospace;font-size:12px;
-  background:var(--bg2);border:1px solid var(--bdr2);
-  padding:1px 5px;border-radius:3px;color:var(--gold-lt);
-}
-.cnt pre{
-  background:var(--bg1);border:1px solid var(--bdr);border-radius:6px;
-  padding:12px;overflow-x:auto;margin:10px 0;position:relative;
-}
+.cnt p{margin:7px 0}.cnt strong{color:var(--gold-lt);font-weight:600}.cnt em{color:var(--tx2)}
+.cnt code{font-family:'JetBrains Mono',monospace;font-size:12px;background:var(--bg2);
+  border:1px solid var(--bdr2);padding:1px 5px;border-radius:3px;color:var(--gold-lt);}
+.cnt pre{background:var(--bg1);border:1px solid var(--bdr);border-radius:6px;
+  padding:12px;overflow-x:auto;margin:10px 0;position:relative;}
 .cnt pre code{background:none;border:none;padding:0;font-size:12px;color:inherit}
-.cnt ul,.cnt ol{margin:7px 0;padding-left:16px}
-.cnt li{margin:3px 0}.cnt li::marker{color:var(--gold)}
-.cnt blockquote{
-  border-left:2px solid var(--gold);padding:6px 12px;margin:10px 0;
-  background:var(--gold-b);border-radius:0 5px 5px 0;color:var(--tx2);
-}
+.cnt ul,.cnt ol{margin:7px 0;padding-left:16px}.cnt li{margin:3px 0}.cnt li::marker{color:var(--gold)}
+.cnt blockquote{border-left:2px solid var(--gold);padding:6px 12px;margin:10px 0;
+  background:var(--gold-b);border-radius:0 5px 5px 0;color:var(--tx2);}
 .cnt table{width:100%;border-collapse:collapse;margin:10px 0;font-size:13px}
-.cnt th{background:var(--gold-a);border:1px solid var(--bdr);padding:6px 10px;color:var(--gold);font-family:'Cinzel',serif;font-size:9px;letter-spacing:1px}
+.cnt th{background:var(--gold-a);border:1px solid var(--bdr);padding:6px 10px;
+  color:var(--gold);font-family:'Cinzel',serif;font-size:9px;letter-spacing:1px}
 .cnt td{border:1px solid var(--bdr2);padding:6px 10px;color:var(--tx2)}
 .cnt a{color:var(--gold);text-decoration:none;border-bottom:1px solid var(--bdr)}
 .cnt hr{border:none;border-top:1px solid var(--bdr);margin:14px 0}
-
-/* 코드 복사 */
-.cpbtn{
-  position:absolute;top:7px;right:7px;background:var(--bg2);
-  border:1px solid var(--bdr);color:var(--tx3);font-size:9px;
-  padding:3px 8px;border-radius:3px;cursor:pointer;
-  font-family:'JetBrains Mono',monospace;transition:color .18s;display:none;
-}
+.cpbtn{position:absolute;top:7px;right:7px;background:var(--bg2);border:1px solid var(--bdr);
+  color:var(--tx3);font-size:9px;padding:3px 8px;border-radius:3px;cursor:pointer;
+  font-family:'JetBrains Mono',monospace;transition:color .18s;display:none;}
 pre:hover .cpbtn{display:block}.cpbtn:hover{color:var(--gold)}
-
-/* 스트리밍 커서 */
 .cur::after{content:'▋';color:var(--gold);animation:bl .6s infinite;margin-left:1px}
 @keyframes bl{0%,100%{opacity:1}50%{opacity:0}}
-
-/* 생각 중 */
 .thinking{display:flex;gap:5px;align-items:center;padding:4px 0}
-.thinking span{
-  width:5px;height:5px;border-radius:50%;background:var(--gold);
-  opacity:.25;animation:th .8s infinite;
-}
-.thinking span:nth-child(2){animation-delay:.15s}
-.thinking span:nth-child(3){animation-delay:.3s}
+.thinking span{width:5px;height:5px;border-radius:50%;background:var(--gold);
+  opacity:.25;animation:th .8s infinite;}
+.thinking span:nth-child(2){animation-delay:.15s}.thinking span:nth-child(3){animation-delay:.3s}
 @keyframes th{0%,100%{opacity:.2}50%{opacity:.8}}
 
-/* ─── SYSTEM PANEL ──────────────────────── */
-#sys-panel{
-  background:var(--bg1);padding:0 14px;max-height:0;
-  overflow:hidden;transition:max-height .25s ease,padding .25s ease;flex-shrink:0;
-}
+/* ── SYSTEM PANEL ── */
+#sys-panel{background:var(--bg1);padding:0 14px;max-height:0;
+  overflow:hidden;transition:max-height .25s ease,padding .25s ease;flex-shrink:0;}
 #sys-panel.open{max-height:120px;padding:10px 14px;border-top:1px solid var(--bdr2)}
-#sys-ta{
-  width:100%;background:var(--bg2);border:1px solid var(--bdr);
-  border-radius:6px;color:var(--tx2);font-family:'JetBrains Mono',monospace;
-  font-size:11px;line-height:1.6;padding:8px 10px;resize:none;height:70px;outline:none;
-}
+#sys-ta{width:100%;background:var(--bg2);border:1px solid var(--bdr);border-radius:6px;
+  color:var(--tx2);font-family:'JetBrains Mono',monospace;font-size:11px;line-height:1.6;
+  padding:8px 10px;resize:none;height:70px;outline:none;}
 #sys-ta:focus{border-color:var(--gold)}
 #sys-ta::placeholder{color:var(--tx3)}
 
-/* ─── CONTROLS ROW ──────────────────────── */
-#ctrl{
-  background:var(--bg1);border-top:1px solid var(--bdr2);
-  padding:8px 14px 0;display:flex;align-items:center;gap:6px;flex-shrink:0;
-  overflow-x:auto;-webkit-overflow-scrolling:touch;
-}
+/* ── CONTROLS ROW ── */
+#ctrl{background:var(--bg1);border-top:1px solid var(--bdr2);
+  padding:8px 14px 0;display:flex;align-items:center;gap:6px;
+  flex-shrink:0;overflow-x:auto;-webkit-overflow-scrolling:touch;}
 #ctrl::-webkit-scrollbar{display:none}
-
-/* 컨트롤 버튼 공통 */
-.cbtn{
-  background:var(--bg2);border:1px solid var(--bdr2);border-radius:16px;
+.cbtn{background:var(--bg2);border:1px solid var(--bdr2);border-radius:16px;
   padding:5px 11px;font-size:11px;color:var(--tx3);cursor:pointer;
-  font-family:'Cinzel',serif;letter-spacing:1px;
-  transition:all .18s;white-space:nowrap;flex-shrink:0;
-}
+  font-family:'Cinzel',serif;letter-spacing:1px;transition:all .18s;white-space:nowrap;flex-shrink:0;}
 .cbtn:hover{border-color:var(--bdr);color:var(--tx2)}
 .cbtn.on{background:var(--gold-a);color:var(--gold);border-color:rgba(201,169,110,.3)}
 .cbtn.on-red{background:rgba(154,80,64,.15);color:var(--red);border-color:rgba(154,80,64,.3)}
-
-/* KB 상태 */
-#kb-chip{
-  display:flex;align-items:center;gap:5px;
-  background:var(--bg2);border:1px solid var(--bdr2);border-radius:16px;
-  padding:5px 10px;font-size:11px;color:var(--tx3);cursor:pointer;
-  transition:all .18s;white-space:nowrap;flex-shrink:0;
-}
-#kb-chip:hover{border-color:var(--bdr);color:var(--tx2)}
+#kb-chip{display:flex;align-items:center;gap:5px;background:var(--bg2);
+  border:1px solid var(--bdr2);border-radius:16px;padding:5px 10px;font-size:11px;
+  color:var(--tx3);cursor:pointer;transition:all .18s;white-space:nowrap;flex-shrink:0;}
 #kb-dot{width:6px;height:6px;border-radius:50%;background:var(--tx3);flex-shrink:0}
-
 #new-btn{margin-left:auto}
-
-/* ─── INPUT AREA ───────────────────────── */
-#input-area{
-  background:var(--bg1);border-top:1px solid var(--bdr2);
-  padding:10px 14px max(10px,env(safe-area-inset-bottom));flex-shrink:0;
-}
-.irow{
-  display:flex;align-items:flex-end;gap:8px;
-  background:var(--bg2);border:1px solid var(--bdr);
-  border-radius:12px;padding:10px 12px 10px 14px;transition:border-color .18s;
-}
-.irow:focus-within{border-color:rgba(201,169,110,.38);box-shadow:0 0 0 2px rgba(201,169,110,.05)}
-#uinput{
-  flex:1;background:none;border:none;outline:none;color:var(--tx);
-  font-family:'Noto Sans KR',sans-serif;font-size:14px;line-height:1.6;
-  resize:none;max-height:160px;min-height:22px;overflow-y:auto;
-}
-#uinput::placeholder{color:var(--tx3)}
-#send{
-  width:34px;height:34px;background:var(--gold-a);border:1px solid rgba(201,169,110,.28);
-  color:var(--gold);border-radius:8px;cursor:pointer;display:flex;
-  align-items:center;justify-content:center;font-size:18px;flex-shrink:0;transition:all .18s;
-}
-#send:hover:not(:disabled){background:rgba(201,169,110,.24)}
-#send:disabled{opacity:.35;cursor:default}
-.hint-row{
-  display:flex;justify-content:space-between;padding:4px 2px 0;
-  font-size:10px;color:var(--tx3);font-family:'JetBrains Mono',monospace;
-}
+.mcp-badge{font-size:9px;color:var(--gold);opacity:.6;font-family:'JetBrains Mono',monospace;letter-spacing:.5px}
 
 /* Freestyle 배너 */
-#free-banner{
-  background:rgba(154,80,64,.12);border-bottom:1px solid rgba(154,80,64,.25);
-  padding:5px 14px;font-size:11px;color:var(--red);
-  font-family:'Cinzel',serif;letter-spacing:1px;
-  text-align:center;display:none;flex-shrink:0;
-}
+#free-banner{background:rgba(154,80,64,.12);border-bottom:1px solid rgba(154,80,64,.25);
+  padding:5px 14px;font-size:11px;color:var(--red);font-family:'Cinzel',serif;
+  letter-spacing:1px;text-align:center;display:none;flex-shrink:0;}
 #free-banner.show{display:block}
 
-/* MCP 도구 수 배지 */
-.mcp-badge{
-  font-size:9px;color:var(--gold);opacity:.6;
-  font-family:'JetBrains Mono',monospace;letter-spacing:.5px;
-}
+/* ── INPUT AREA ── */
+#input-area{background:var(--bg1);border-top:1px solid var(--bdr2);
+  padding:10px 14px max(10px,env(safe-area-inset-bottom));flex-shrink:0;}
+.irow{display:flex;align-items:flex-end;gap:8px;background:var(--bg2);
+  border:1px solid var(--bdr);border-radius:12px;padding:10px 12px 10px 14px;transition:border-color .18s;}
+.irow:focus-within{border-color:rgba(201,169,110,.38);box-shadow:0 0 0 2px rgba(201,169,110,.05)}
+#uinput{flex:1;background:none;border:none;outline:none;color:var(--tx);
+  font-family:'Noto Sans KR',sans-serif;font-size:14px;line-height:1.6;
+  resize:none;max-height:160px;min-height:22px;overflow-y:auto;}
+#uinput::placeholder{color:var(--tx3)}
+#send{width:34px;height:34px;background:var(--gold-a);border:1px solid rgba(201,169,110,.28);
+  color:var(--gold);border-radius:8px;cursor:pointer;display:flex;align-items:center;
+  justify-content:center;font-size:18px;flex-shrink:0;transition:all .18s;}
+#send:hover:not(:disabled){background:rgba(201,169,110,.24)}
+#send:disabled{opacity:.35;cursor:default}
+.hint-row{display:flex;justify-content:space-between;padding:4px 2px 0;
+  font-size:10px;color:var(--tx3);font-family:'JetBrains Mono',monospace;}
 
-/* ─── TOAST ─────────────────────────────── */
-#toast{
-  position:fixed;bottom:80px;left:50%;transform:translateX(-50%);
+/* ── TOAST ── */
+#toast{position:fixed;bottom:80px;left:50%;transform:translateX(-50%);
   background:var(--bg3);border:1px solid var(--bdr);border-radius:20px;
-  padding:8px 18px;font-size:12px;color:var(--tx2);
-  opacity:0;pointer-events:none;transition:opacity .25s;z-index:99;white-space:nowrap;
-}
+  padding:8px 18px;font-size:12px;color:var(--tx2);opacity:0;pointer-events:none;
+  transition:opacity .25s;z-index:99;white-space:nowrap;}
 #toast.on{opacity:1}
 </style>
 </head>
 <body>
 
-<!-- ─── TOP BAR ──── -->
+<!-- TOP BAR -->
 <div id="topbar">
   <div class="logo">ASTERION<span>HUB</span></div>
   <div class="mtog">
     <button class="mb" id="b-claude" onclick="setModel('claude')">CLAUDE</button>
     <button class="mb" id="b-gemini" onclick="setModel('gemini')">GEMINI</button>
+    <button class="mb" id="b-gpt"    onclick="setModel('gpt')">GPT</button>
   </div>
 </div>
 
-<!-- ─── FREESTYLE 배너 ──── -->
+<!-- FREESTYLE 배너 -->
 <div id="free-banner">⚡ FREESTYLE MODE — 페르소나 해제됨</div>
 
-<!-- ─── MESSAGES ──── -->
+<!-- MESSAGES -->
 <div id="msgs">
   <div id="empty">
-    <div class="e-star">✦</div>
-    <div class="e-name">ASTERION INTELLIGENCE HUB</div>
-    <div class="chips" id="chip-list">
-      <div class="chip" onclick="useChip(this)">BTR 파이프라인 전체 흐름</div>
-      <div class="chip" onclick="useChip(this)">3자 루브릭 Hard Stop 조건</div>
-      <div class="chip" onclick="useChip(this)">StructureCode 채번 로직</div>
-      <div class="chip" onclick="useChip(this)">Archive 시트 컬럼 구조</div>
-      <div class="chip" onclick="useChip(this)">ASTERION Flow 구독 티어</div>
-      <div class="chip" onclick="useChip(this)">Evolution Memory 환류</div>
-      <div class="chip" onclick="useChip(this)">S Class 달성 조건</div>
-      <div class="chip" onclick="useChip(this)">MCP 도구 계층 구조</div>
-    </div>
-  </div>
-</div>
-
-<!-- ─── SYSTEM PANEL ──── -->
-<div id="sys-panel">
-  <textarea id="sys-ta" placeholder="추가 시스템 지시 (기본 프롬프트에 append)"></textarea>
-</div>
-
-<!-- ─── CONTROLS ROW ──── -->
-<div id="ctrl">
-  <div id="kb-chip" onclick="reloadKB()" title="지식베이스 새로고침">
-    <div id="kb-dot"></div>
-    <span id="kb-txt">KB 확인 중</span>
-  </div>
-  <button class="cbtn" id="sys-btn" onclick="toggleSys()">SYS</button>
-  <button class="cbtn" id="free-btn" onclick="toggleFree()">FREE</button>
-  <span class="mcp-badge" id="mcp-badge"></span>
-  <button class="cbtn" id="new-btn" onclick="newChat()">+ NEW</button>
-</div>
-
-<!-- ─── INPUT AREA ──── -->
-<div id="input-area">
-  <div class="irow">
-    <textarea id="uinput" rows="1"
-      placeholder="ASTERION에 대해 물어보세요..."
-      onkeydown="onKey(event)"
-      oninput="resize(this);countChars()"></textarea>
-    <button id="send" onclick="send()">↑</button>
-  </div>
-  <div class="hint-row">
-    <span>Enter 전송 · Shift+Enter 줄바꿈</span>
-    <span id="cc"></span>
-  </div>
-</div>
-
-<div id="toast"></div>
-
-<script>
-/* ─── STATE ─────────────────────────────── */
-const S = {
-  model:     'claude',
-  messages:  [],       // {role, content:string}
-  streaming: false,
-  freestyle: false,
-};
-
-/* ─── INIT ──────────────────────────────── */
-function init() {
-  const saved = localStorage.getItem('ah-state');
-  if (saved) {
-    try {
-      const d = JSON.parse(saved);
-      S.model    = d.model    || 'claude';
-      S.freestyle = d.freestyle || false;
-    } catch(_) {}
-  }
-  setModel(S.model, false);
-  if (S.freestyle) applyFreestyle(false);
-  checkStatus();
-
-  // marked 설정
-  marked.setOptions({
-    breaks: true, gfm: true,
-    highlight: (code, lang) => {
-      if (lang && hljs.getLanguage(lang)) return hljs.highlight(code, {language:lang}).value;
-      return hljs.highlightAuto(code).value;
-    }
-  });
-}
-
-function save() {
-  localStorage.setItem('ah-state', JSON.stringify({ model: S.model, freestyle: S.freestyle }));
-}
-
-/* ─── STATUS ───────────────────────────── */
-async function checkStatus() {
-  try {
-    const r = await fetch('/api/status');
-    const d = await r.json();
-    updateKB(d);
-    const n = d.mcp_tools_count || 0;
-    document.getElementById('mcp-badge').textContent = n > 0 ? `${n} tools` : '';
-  } catch(_) { setKB('오류', var_red()); }
-}
-function var_red() { return '#9a5040'; }
-
-function updateKB(d) {
-  const s = d.drive_status || '';
-  if (s.startsWith('loaded'))            setKB(`KB ${d.drive_files?.length||0}개`, '#5a8a6a');
-  else if (s.includes('error'))          setKB('KB 오류', '#9a5040');
-  else if (s === 'no_folder_configured') setKB('KB 미설정', '#6b5c44');
-  else                                   setKB('KB …', '#6b5c44');
-}
-function setKB(txt, color) {
-  document.getElementById('kb-txt').textContent = txt;
-  document.getElementById('kb-dot').style.background = color;
-}
-
-async function reloadKB() {
-  setKB('로드 중…', '#c9a96e');
-  try {
-    await fetch('/api/reload-knowledge', { method: 'POST' });
-    await checkStatus();
-    toast('지식베이스 새로고침 완료');
-  } catch(e) { toast('실패: ' + e.message); }
-}
-
-/* ─── MODEL ────────────────────────────── */
-function setModel(m, sv = true) {
-  S.model = m;
-  document.getElementById('b-claude').classList.toggle('on', m === 'claude');
-  document.getElementById('b-gemini').classList.toggle('on', m === 'gemini');
-  if (sv) save();
-}
-
-/* ─── FREESTYLE ────────────────────────── */
-function toggleFree() {
-  S.freestyle = !S.freestyle;
-  applyFreestyle(true);
-  save();
-}
-function applyFreestyle(showToast) {
-  const btn    = document.getElementById('free-btn');
-  const banner = document.getElementById('free-banner');
-  btn.classList.toggle('on-red', S.freestyle);
-  banner.classList.toggle('show', S.freestyle);
-  if (showToast) toast(S.freestyle ? '페르소나 해제됨 — Freestyle ON' : '페르소나 복원됨');
-}
-
-/* ─── CHAT ─────────────────────────────── */
-function newChat() {
-  S.messages = [];
-  document.getElementById('msgs').innerHTML = buildEmpty();
-}
-
-function buildEmpty() {
-  return `<div id="empty">
     <div class="e-star">✦</div>
     <div class="e-name">ASTERION INTELLIGENCE HUB</div>
     <div class="chips">
@@ -440,215 +202,252 @@ function buildEmpty() {
       <div class="chip" onclick="useChip(this)">S Class 달성 조건</div>
       <div class="chip" onclick="useChip(this)">MCP 도구 계층 구조</div>
     </div>
-  </div>`;
+  </div>
+</div>
+
+<!-- SYSTEM PANEL -->
+<div id="sys-panel">
+  <textarea id="sys-ta" placeholder="추가 시스템 지시 (기본 프롬프트에 append)"></textarea>
+</div>
+
+<!-- CONTROLS ROW -->
+<div id="ctrl">
+  <div id="kb-chip" onclick="reloadKB()" title="지식베이스 새로고침">
+    <div id="kb-dot"></div>
+    <span id="kb-txt">KB 확인 중</span>
+  </div>
+  <button class="cbtn" id="sys-btn" onclick="toggleSys()">SYS</button>
+  <button class="cbtn" id="free-btn" onclick="toggleFree()">FREE</button>
+  <span class="mcp-badge" id="mcp-badge"></span>
+  <button class="cbtn" id="new-btn" onclick="newChat()">+ NEW</button>
+</div>
+
+<!-- INPUT AREA -->
+<div id="input-area">
+  <div class="irow">
+    <textarea id="uinput" rows="1"
+      placeholder="ASTERION에 대해 물어보세요..."
+      onkeydown="onKey(event)" oninput="resize(this);countChars()"></textarea>
+    <button id="send" onclick="send()">↑</button>
+  </div>
+  <div class="hint-row">
+    <span>Enter 전송 · Shift+Enter 줄바꿈</span>
+    <span id="cc"></span>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+/* ── STATE ── */
+const S = { model:'claude', messages:[], streaming:false, freestyle:false };
+
+const MODEL_STYLE = {
+  claude: { avClass:'a-claude', whoClass:'claude', label:'CLAUDE', icon:'✦' },
+  gemini: { avClass:'a-gemini', whoClass:'gemini', label:'GEMINI', icon:'◈' },
+  gpt:    { avClass:'a-gpt',    whoClass:'gpt',    label:'GPT',    icon:'⬡' },
+};
+
+/* ── INIT ── */
+function init() {
+  try {
+    const d = JSON.parse(localStorage.getItem('ah-v26') || '{}');
+    S.model    = d.model    || 'claude';
+    S.freestyle = d.freestyle || false;
+  } catch(_) {}
+  setModel(S.model, false);
+  if (S.freestyle) applyFreestyle(false);
+  checkStatus();
+  marked.setOptions({
+    breaks:true, gfm:true,
+    highlight:(code,lang)=>{
+      if(lang&&hljs.getLanguage(lang)) return hljs.highlight(code,{language:lang}).value;
+      return hljs.highlightAuto(code).value;
+    }
+  });
+}
+function save() { localStorage.setItem('ah-v26', JSON.stringify({model:S.model,freestyle:S.freestyle})); }
+
+/* ── STATUS ── */
+async function checkStatus() {
+  try {
+    const d = await (await fetch('/api/status')).json();
+    const s = d.drive?.status || '';
+    if (s.startsWith('loaded'))     setKB(`KB ${d.drive?.chars > 0 ? '연결됨' : '0'}`, '#5a8a6a');
+    else if (s.includes('error'))   setKB('KB 오류', '#9a5040');
+    else                            setKB('KB 미설정', '#6b5c44');
+    const n = d.mcp?.tools || 0;
+    document.getElementById('mcp-badge').textContent = n > 0 ? `${n} tools` : '';
+  } catch(_) { setKB('오류','#9a5040'); }
+}
+function setKB(txt,color){
+  document.getElementById('kb-txt').textContent = txt;
+  document.getElementById('kb-dot').style.background = color;
+}
+async function reloadKB(){
+  setKB('로드 중…','#c9a96e');
+  try{ await fetch('/api/reload-knowledge',{method:'POST'}); await checkStatus(); toast('KB 새로고침 완료'); }
+  catch(e){ toast('실패: '+e.message); }
 }
 
-async function send() {
-  if (S.streaming) return;
-  const ta  = document.getElementById('uinput');
-  const txt = ta.value.trim();
-  if (!txt) return;
+/* ── MODEL ── */
+function setModel(m, sv=true) {
+  S.model = m;
+  ['claude','gemini','gpt'].forEach(k => {
+    const btn = document.getElementById(`b-${k}`);
+    btn.className = 'mb' + (k === m ? ` on-${k}` : '');
+  });
+  if (sv) save();
+}
 
-  const em = document.getElementById('empty');
-  if (em) em.remove();
+/* ── FREESTYLE ── */
+function toggleFree(){ S.freestyle=!S.freestyle; applyFreestyle(true); save(); }
+function applyFreestyle(showToast){
+  document.getElementById('free-btn').classList.toggle('on-red', S.freestyle);
+  document.getElementById('free-banner').classList.toggle('show', S.freestyle);
+  if(showToast) toast(S.freestyle ? '페르소나 해제 — Freestyle ON' : '페르소나 복원됨');
+}
 
-  S.messages.push({ role: 'user', content: txt });
-  appendMsg('user', txt);
+/* ── CHAT ── */
+function newChat(){
+  S.messages = [];
+  document.getElementById('msgs').innerHTML = emptyHTML();
+}
+function emptyHTML(){
+  return `<div id="empty">
+    <div class="e-star">✦</div><div class="e-name">ASTERION INTELLIGENCE HUB</div>
+    <div class="chips">
+      <div class="chip" onclick="useChip(this)">BTR 파이프라인 전체 흐름</div>
+      <div class="chip" onclick="useChip(this)">3자 루브릭 Hard Stop 조건</div>
+      <div class="chip" onclick="useChip(this)">StructureCode 채번 로직</div>
+      <div class="chip" onclick="useChip(this)">Archive 시트 컬럼 구조</div>
+      <div class="chip" onclick="useChip(this)">ASTERION Flow 구독 티어</div>
+      <div class="chip" onclick="useChip(this)">Evolution Memory 환류</div>
+      <div class="chip" onclick="useChip(this)">S Class 달성 조건</div>
+      <div class="chip" onclick="useChip(this)">MCP 도구 계층 구조</div>
+    </div></div>`;
+}
 
-  ta.value = '';
-  ta.style.height = '22px';
-  countChars();
-
+async function send(){
+  if(S.streaming) return;
+  const ta=document.getElementById('uinput'), txt=ta.value.trim();
+  if(!txt) return;
+  const em=document.getElementById('empty'); if(em) em.remove();
+  S.messages.push({role:'user',content:txt});
+  appendMsg('user',txt);
+  ta.value=''; ta.style.height='22px'; countChars();
   await streamAI();
 }
 
-async function streamAI() {
-  S.streaming = true;
-  document.getElementById('send').disabled = true;
-
-  // AI 말풍선 생성
-  const aiRow  = appendMsg('assistant', '', true);
-  const cntEl  = aiRow.querySelector('.cnt');
+async function streamAI(){
+  S.streaming=true;
+  document.getElementById('send').disabled=true;
+  const aiRow=appendMsg('assistant','',true);
+  const cntEl=aiRow.querySelector('.cnt');
   cntEl.classList.add('cur');
-  cntEl.innerHTML = '<div class="thinking"><span></span><span></span><span></span></div>';
+  cntEl.innerHTML='<div class="thinking"><span></span><span></span><span></span></div>';
+  const pillsEl=document.createElement('div'); pillsEl.className='tool-pills';
+  cntEl.parentElement.insertBefore(pillsEl,cntEl);
+  const toolPills={};
+  const sys=document.getElementById('sys-ta').value;
 
-  // 도구 알림 영역
-  const pillsEl = document.createElement('div');
-  pillsEl.className = 'tool-pills';
-  cntEl.parentElement.insertBefore(pillsEl, cntEl);
-
-  const toolPills = {};   // name → element
-  const sys = document.getElementById('sys-ta').value;
-
-  try {
-    const res = await fetch('/api/chat', {
-      method:  'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify({
-        model:     S.model,
-        messages:  S.messages,
-        system:    sys,
-        freestyle: S.freestyle,
-      }),
+  try{
+    const res=await fetch('/api/chat',{
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({model:S.model,messages:S.messages,system:sys,freestyle:S.freestyle}),
     });
+    if(!res.ok) throw new Error(`HTTP ${res.status}: ${(await res.text()).slice(0,200)}`);
 
-    if (!res.ok) {
-      const t = await res.text();
-      throw new Error(`HTTP ${res.status}: ${t.slice(0, 200)}`);
-    }
+    const reader=res.body.getReader(), decoder=new TextDecoder();
+    let buf='', full='', first=true;
 
-    const reader  = res.body.getReader();
-    const decoder = new TextDecoder();
-    let buf = '', full = '', first = true;
-
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      buf += decoder.decode(value, { stream: true });
-
-      const lines = buf.split('\n');
-      buf = lines.pop();
-
-      for (const line of lines) {
-        if (!line.startsWith('data: ')) continue;
-        const raw = line.slice(6).trim();
-        if (!raw || raw === '[DONE]') continue;
-        try {
-          const obj = JSON.parse(raw);
-
-          // 도구 호출 알림
-          if (obj.tool_call) {
-            const pill = document.createElement('div');
-            pill.className = 'tpill';
-            pill.innerHTML = `<span class="ti">🔧</span><span>${esc(obj.tool_call.name)}</span>`;
-            pillsEl.appendChild(pill);
-            toolPills[obj.tool_call.name] = pill;
-            if (first) { cntEl.innerHTML = ''; first = false; }
-            scrollBot();
+    while(true){
+      const{done,value}=await reader.read(); if(done) break;
+      buf+=decoder.decode(value,{stream:true});
+      const lines=buf.split('\n'); buf=lines.pop();
+      for(const line of lines){
+        if(!line.startsWith('data: ')) continue;
+        const raw=line.slice(6).trim();
+        if(!raw||raw==='[DONE]') continue;
+        try{
+          const obj=JSON.parse(raw);
+          if(obj.tool_call){
+            if(first){cntEl.innerHTML='';first=false;}
+            const p=document.createElement('div'); p.className='tpill';
+            p.innerHTML=`<span>🔧</span><span>${esc(obj.tool_call.name)}</span>`;
+            pillsEl.appendChild(p); toolPills[obj.tool_call.name]=p; scrollBot();
           }
-
-          // 도구 결과 알림
-          if (obj.tool_result) {
-            const pill = toolPills[obj.tool_result.name];
-            if (pill) {
-              pill.classList.add(obj.tool_result.ok ? 'done' : 'err');
-              pill.innerHTML =
-                `<span class="ti">${obj.tool_result.ok ? '✓' : '✗'}</span>` +
-                `<span>${esc(obj.tool_result.name)}</span>`;
-            }
+          if(obj.tool_result){
+            const p=toolPills[obj.tool_result.name];
+            if(p){ p.classList.add(obj.tool_result.ok?'done':'err');
+              p.innerHTML=`<span>${obj.tool_result.ok?'✓':'✗'}</span><span>${esc(obj.tool_result.name)}</span>`; }
           }
-
-          // 오류
-          if (obj.error) {
-            cntEl.innerHTML = `<span style="color:var(--red)">⚠️ 오류: ${esc(obj.error)}</span>`;
-            toast('오류: ' + obj.error);
+          if(obj.error){
+            cntEl.innerHTML=`<span style="color:var(--red)">⚠️ 오류: ${esc(obj.error)}</span>`;
+            toast('오류: '+obj.error);
           }
-
-          // 텍스트
-          if (obj.text) {
-            if (first) { cntEl.innerHTML = ''; first = false; }
-            full += obj.text;
-            cntEl.innerHTML = marked.parse(full);
-            hljs.highlightAll();
-            addCopyBtns();
-            scrollBot();
+          if(obj.text){
+            if(first){cntEl.innerHTML='';first=false;}
+            full+=obj.text;
+            cntEl.innerHTML=marked.parse(full);
+            hljs.highlightAll(); addCopyBtns(); scrollBot();
           }
-        } catch(_) {}
+        }catch(_){}
       }
     }
-
-    if (full) S.messages.push({ role: 'assistant', content: full });
-
-  } catch(e) {
-    cntEl.innerHTML = `<span style="color:var(--red)">⚠️ 오류: ${esc(e.message)}</span>`;
+    if(full) S.messages.push({role:'assistant',content:full});
+  }catch(e){
+    cntEl.innerHTML=`<span style="color:var(--red)">⚠️ 오류: ${esc(e.message)}</span>`;
     toast(e.message);
-    if (S.messages.at(-1)?.role === 'user') S.messages.pop();
+    if(S.messages.at(-1)?.role==='user') S.messages.pop();
   }
 
   cntEl.classList.remove('cur');
-  S.streaming = false;
-  document.getElementById('send').disabled = false;
+  S.streaming=false;
+  document.getElementById('send').disabled=false;
   document.getElementById('uinput').focus();
 }
 
-/* ─── DOM HELPERS ───────────────────────── */
-function appendMsg(role, content, empty) {
-  const isU  = role === 'user';
-  const now  = new Date().toLocaleTimeString('ko-KR', { hour:'2-digit', minute:'2-digit' });
-  const who  = isU ? 'USER' : (S.model === 'gemini' ? 'GEMINI' : 'CLAUDE');
-
-  const row  = document.createElement('div');
-  row.className = 'row';
-  row.innerHTML = `
-    <div class="av ${isU?'u':'a'}">${isU?'U':'✦'}</div>
+/* ── DOM ── */
+function appendMsg(role,content,empty){
+  const isU=role==='user';
+  const ms=MODEL_STYLE[S.model];
+  const now=new Date().toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'});
+  const row=document.createElement('div'); row.className='row';
+  row.innerHTML=`
+    <div class="av ${isU?'u':ms.avClass}">${isU?'U':ms.icon}</div>
     <div class="mb2">
       <div class="meta">
-        <span class="who ${isU?'u':'a'}">${who}</span>
+        <span class="who ${isU?'u':ms.whoClass}">${isU?'USER':ms.label}</span>
         <span class="ts">${now}</span>
       </div>
       <div class="cnt ${isU?'u':''}">
-        ${isU ? esc(content).replace(/\n/g,'<br>') : (content ? marked.parse(content) : '')}
+        ${isU?esc(content).replace(/\n/g,'<br>'):(content?marked.parse(content):'')}
       </div>
     </div>`;
-
   document.getElementById('msgs').appendChild(row);
-  if (!empty) { hljs.highlightAll(); addCopyBtns(); scrollBot(); }
+  if(!empty){hljs.highlightAll();addCopyBtns();scrollBot();}
   return row;
 }
-
-function addCopyBtns() {
-  document.querySelectorAll('.cnt pre:not([data-cp])').forEach(pre => {
-    pre.setAttribute('data-cp','1');
-    pre.style.position = 'relative';
-    const btn = document.createElement('button');
-    btn.className = 'cpbtn'; btn.textContent = 'COPY';
-    btn.onclick = () => {
-      navigator.clipboard?.writeText(pre.querySelector('code')?.textContent||'');
-      btn.textContent = 'COPIED';
-      setTimeout(() => btn.textContent = 'COPY', 1500);
-    };
-    pre.appendChild(btn);
+function addCopyBtns(){
+  document.querySelectorAll('.cnt pre:not([data-cp])').forEach(p=>{
+    p.setAttribute('data-cp','1'); p.style.position='relative';
+    const b=document.createElement('button'); b.className='cpbtn'; b.textContent='COPY';
+    b.onclick=()=>{ navigator.clipboard?.writeText(p.querySelector('code')?.textContent||'');
+      b.textContent='COPIED'; setTimeout(()=>b.textContent='COPY',1500); };
+    p.appendChild(b);
   });
 }
+function scrollBot(){ const e=document.getElementById('msgs'); e.scrollTop=e.scrollHeight; }
 
-function scrollBot() {
-  const el = document.getElementById('msgs');
-  el.scrollTop = el.scrollHeight;
-}
-
-/* ─── UI ────────────────────────────────── */
-function onKey(e) {
-  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
-}
-function resize(el) {
-  el.style.height = '22px';
-  el.style.height = Math.min(el.scrollHeight, 160) + 'px';
-}
-function countChars() {
-  const n = document.getElementById('uinput').value.length;
-  document.getElementById('cc').textContent = n > 0 ? n.toLocaleString() : '';
-}
-function useChip(el) {
-  const ta = document.getElementById('uinput');
-  ta.value = el.textContent; resize(ta); countChars(); ta.focus();
-}
-function toggleSys() {
-  const p = document.getElementById('sys-panel');
-  const b = document.getElementById('sys-btn');
-  const o = !p.classList.contains('open');
-  p.classList.toggle('open', o);
-  b.classList.toggle('on', o);
-}
-function esc(s) {
-  return String(s)
-    .replace(/&/g,'&amp;').replace(/</g,'&lt;')
-    .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-}
-function toast(msg, ms = 3200) {
-  const el = document.getElementById('toast');
-  el.textContent = msg; el.classList.add('on');
-  setTimeout(() => el.classList.remove('on'), ms);
-}
+/* ── UI ── */
+function onKey(e){ if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();send();} }
+function resize(el){ el.style.height='22px'; el.style.height=Math.min(el.scrollHeight,160)+'px'; }
+function countChars(){ const n=document.getElementById('uinput').value.length; document.getElementById('cc').textContent=n>0?n.toLocaleString():''; }
+function useChip(el){ const t=document.getElementById('uinput'); t.value=el.textContent; resize(t); countChars(); t.focus(); }
+function toggleSys(){ const p=document.getElementById('sys-panel'),b=document.getElementById('sys-btn'),o=!p.classList.contains('open'); p.classList.toggle('open',o); b.classList.toggle('on',o); }
+function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function toast(msg,ms=3200){ const e=document.getElementById('toast'); e.textContent=msg; e.classList.add('on'); setTimeout(()=>e.classList.remove('on'),ms); }
 
 init();
 </script>
