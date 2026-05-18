@@ -16,7 +16,8 @@
   --bg2:#161210;--bg3:#1e1a14;--bdr:rgba(201,169,110,.20);
   --bdr2:rgba(201,169,110,.09);--tx:#ddd0b8;--tx2:#a08c6e;
   --tx3:#6b5c44;--green:#5a8a6a;--red:#9a5040;
-  --gpt-c:rgba(16,163,127,.18);--gpt-border:rgba(16,163,127,.35);
+  --btr-c:rgba(180,100,50,.20);--btr-b:rgba(200,120,60,.35);
+  --btr-tx:rgba(230,150,80,.95);
 }
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 html{-webkit-text-size-adjust:100%}
@@ -34,7 +35,7 @@ body{height:100dvh;background:var(--bg);color:var(--tx);
 .logo{font-family:'Cinzel',serif;font-size:14px;letter-spacing:4px;color:var(--gold);white-space:nowrap}
 .logo span{font-size:9px;letter-spacing:2px;color:var(--tx3);display:block;margin-top:-2px}
 
-/* 3모델 토글 */
+/* 모델 토글 (Claude + Gemini) */
 .mtog{display:flex;background:var(--bg2);border:1px solid var(--bdr);
   border-radius:20px;padding:3px;gap:2px;flex-shrink:0;}
 .mb{font-family:'Cinzel',serif;font-size:9px;letter-spacing:1px;
@@ -43,11 +44,80 @@ body{height:100dvh;background:var(--bg);color:var(--tx);
 .mb:hover{color:var(--tx2)}
 .mb.on-claude{background:var(--gold-a);color:var(--gold);border:1px solid rgba(201,169,110,.28)}
 .mb.on-gemini{background:rgba(74,172,170,.14);color:rgba(74,212,210,.9);border:1px solid rgba(74,172,170,.3)}
-.mb.on-gpt{background:var(--gpt-c);color:rgba(16,163,127,.95);border:1px solid var(--gpt-border)}
+
+/* BTR 알림 버튼 */
+#btr-wrap{position:relative;flex-shrink:0}
+#btr-btn{background:var(--bg2);border:1px solid var(--bdr2);border-radius:16px;
+  padding:5px 11px;font-size:11px;color:var(--tx3);cursor:pointer;
+  font-family:'Cinzel',serif;letter-spacing:1px;transition:all .25s;white-space:nowrap;
+  display:flex;align-items:center;gap:5px;}
+#btr-btn:hover{border-color:var(--btr-b);color:var(--btr-tx)}
+#btr-btn.active{background:var(--btr-c);color:var(--btr-tx);border-color:var(--btr-b)}
+#btr-btn.has-notif{border-color:var(--btr-b);color:var(--btr-tx);
+  animation:btr-pulse 2s infinite;}
+@keyframes btr-pulse{0%,100%{box-shadow:0 0 0 0 rgba(200,120,60,.4)}50%{box-shadow:0 0 0 5px rgba(200,120,60,.0)}}
+#btr-badge{background:#c05020;color:#fff;border-radius:10px;
+  padding:1px 5px;font-size:9px;font-family:'JetBrains Mono',monospace;
+  font-style:normal;min-width:16px;text-align:center;display:none;}
+
+/* ── BTR NOTIFICATION PANEL ── */
+#btr-panel{background:var(--bg1);border-bottom:1px solid var(--btr-b);
+  flex-shrink:0;max-height:0;overflow:hidden;transition:max-height .3s ease;}
+#btr-panel.open{max-height:70dvh;overflow-y:auto;}
+#btr-panel-hdr{display:flex;align-items:center;justify-content:space-between;
+  padding:10px 14px 8px;border-bottom:1px solid var(--bdr2);}
+#btr-panel-hdr .btr-title{font-family:'Cinzel',serif;font-size:10px;
+  letter-spacing:2px;color:var(--btr-tx);}
+#btr-close{background:none;border:none;color:var(--tx3);font-size:12px;
+  cursor:pointer;padding:4px 8px;border-radius:8px;font-family:'Cinzel',serif;
+  letter-spacing:1px;transition:color .18s;}
+#btr-close:hover{color:var(--tx2)}
+#btr-empty{padding:24px 14px;text-align:center;font-size:12px;
+  color:var(--tx3);font-family:'Cinzel',serif;letter-spacing:1px;}
+#btr-cards{padding:8px 14px 14px;}
+
+/* Notification Card */
+.nc{background:var(--bg2);border:1px solid var(--btr-b);border-radius:10px;
+  margin-bottom:10px;overflow:hidden;transition:all .2s;}
+.nc-hdr{display:flex;align-items:center;justify-content:space-between;
+  padding:10px 12px 8px;border-bottom:1px solid var(--bdr2);}
+.nc-meta{display:flex;align-items:center;gap:6px;}
+.nc-type{background:var(--btr-c);color:var(--btr-tx);border-radius:10px;
+  padding:2px 8px;font-size:9px;font-family:'Cinzel',serif;letter-spacing:1px;border:1px solid var(--btr-b);}
+.nc-session{font-size:10px;color:var(--tx3);font-family:'JetBrains Mono',monospace;}
+.nc-time{font-size:9px;color:var(--tx3);font-family:'JetBrains Mono',monospace;}
+.nc-dismiss{background:none;border:none;color:var(--tx3);font-size:15px;
+  cursor:pointer;padding:2px 6px;border-radius:6px;transition:color .18s;line-height:1;}
+.nc-dismiss:hover{color:var(--red)}
+.nc-title{padding:8px 12px 4px;font-size:13px;color:var(--gold-lt);font-weight:500;}
+.nc-content{padding:4px 12px 10px;font-size:12px;color:var(--tx2);line-height:1.7;
+  white-space:pre-wrap;max-height:120px;overflow-y:auto;}
+.nc-reply{padding:8px 12px 10px;border-top:1px solid var(--bdr2);display:flex;gap:8px;align-items:flex-end;}
+.nc-ta{flex:1;background:var(--bg3);border:1px solid var(--bdr);border-radius:8px;
+  color:var(--tx);font-family:'Noto Sans KR',sans-serif;font-size:12px;
+  line-height:1.6;padding:7px 10px;resize:none;height:60px;outline:none;
+  transition:border-color .18s;}
+.nc-ta:focus{border-color:var(--gold)}
+.nc-ta::placeholder{color:var(--tx3)}
+.nc-send{background:var(--btr-c);border:1px solid var(--btr-b);color:var(--btr-tx);
+  border-radius:8px;padding:7px 14px;font-size:11px;cursor:pointer;
+  font-family:'Cinzel',serif;letter-spacing:1px;transition:all .18s;white-space:nowrap;flex-shrink:0;}
+.nc-send:hover{background:rgba(180,100,50,.32)}
+/* confirm overlay inside card */
+.nc-confirm{display:none;background:rgba(8,6,4,.92);border-top:1px solid var(--red);
+  padding:12px;text-align:center;}
+.nc-confirm.show{display:block}
+.nc-confirm p{font-size:12px;color:var(--tx2);margin-bottom:10px;}
+.nc-confirm-btns{display:flex;gap:8px;justify-content:center;}
+.nc-yes{background:rgba(154,80,64,.25);border:1px solid rgba(154,80,64,.5);
+  color:var(--red);padding:5px 16px;border-radius:8px;cursor:pointer;font-size:11px;
+  font-family:'Cinzel',serif;letter-spacing:1px;}
+.nc-no{background:var(--bg3);border:1px solid var(--bdr);
+  color:var(--tx3);padding:5px 16px;border-radius:8px;cursor:pointer;font-size:11px;
+  font-family:'Cinzel',serif;letter-spacing:1px;}
 
 /* ── MESSAGES ── */
 #msgs{flex:1;overflow-y:auto;padding:16px 0 8px;-webkit-overflow-scrolling:touch}
-
 #empty{display:flex;flex-direction:column;align-items:center;
   justify-content:center;min-height:100%;gap:12px;padding:40px 20px;}
 .e-star{font-family:'Cinzel',serif;font-size:26px;letter-spacing:6px;color:rgba(201,169,110,.18)}
@@ -65,22 +135,28 @@ body{height:100dvh;background:var(--bg);color:var(--tx);
 .av.u{background:var(--bg3);border:1px solid var(--bdr2);color:var(--tx2);font-family:'Cinzel',serif}
 .av.a-claude{background:var(--gold-a);border:1px solid rgba(201,169,110,.25)}
 .av.a-gemini{background:rgba(74,172,170,.14);border:1px solid rgba(74,172,170,.3)}
-.av.a-gpt{background:var(--gpt-c);border:1px solid var(--gpt-border)}
 .mb2{flex:1;min-width:0}
 .meta{display:flex;gap:8px;align-items:center;margin-bottom:4px}
 .who{font-family:'Cinzel',serif;font-size:9px;letter-spacing:2px}
-.who.u{color:var(--tx3)}.who.claude{color:var(--gold)}
-.who.gemini{color:rgba(74,212,210,.9)}.who.gpt{color:rgba(16,163,127,.95)}
+.who.u{color:var(--tx3)}.who.claude{color:var(--gold)}.who.gemini{color:rgba(74,212,210,.9)}
 .ts{font-size:10px;color:var(--tx3);font-family:'JetBrains Mono',monospace}
 .cnt{color:var(--tx)}.cnt.u{color:var(--tx2)}
 
-/* 도구 체이닝 pills */
+/* 도구 pills */
 .tool-pills{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:8px}
 .tpill{display:flex;align-items:center;gap:4px;background:var(--bg3);
   border:1px solid var(--bdr2);border-radius:10px;padding:3px 8px;
   font-size:10px;color:var(--tx3);font-family:'JetBrains Mono',monospace;transition:all .2s;}
 .tpill.done{border-color:rgba(90,138,106,.4);color:var(--green)}
 .tpill.err{border-color:rgba(154,80,64,.4);color:var(--red)}
+
+/* TTS 버튼 */
+.tts-btn{display:inline-flex;align-items:center;gap:4px;margin-top:8px;
+  background:var(--bg3);border:1px solid var(--bdr2);border-radius:14px;
+  padding:4px 10px;font-size:10px;color:var(--tx3);cursor:pointer;
+  font-family:'Cinzel',serif;letter-spacing:1px;transition:all .18s;}
+.tts-btn:hover{border-color:var(--bdr);color:var(--tx2)}
+.tts-btn.playing{background:var(--gold-a);border-color:rgba(201,169,110,.35);color:var(--gold)}
 
 /* 마크다운 */
 .cnt h1,.cnt h2,.cnt h3{font-family:'Cinzel',serif;color:var(--gold);margin:14px 0 6px;letter-spacing:1px}
@@ -121,6 +197,25 @@ pre:hover .cpbtn{display:block}.cpbtn:hover{color:var(--gold)}
   padding:8px 10px;resize:none;height:70px;outline:none;}
 #sys-ta:focus{border-color:var(--gold)}
 #sys-ta::placeholder{color:var(--tx3)}
+
+/* ── SETTINGS PANEL ── */
+#settings-panel{background:var(--bg1);padding:0 14px;max-height:0;
+  overflow:hidden;transition:max-height .3s ease,padding .3s ease;flex-shrink:0;}
+#settings-panel.open{max-height:260px;overflow-y:auto;padding:12px 14px;border-top:1px solid var(--bdr2)}
+.sp-section{margin-bottom:14px}
+.sp-title{font-family:'Cinzel',serif;font-size:9px;letter-spacing:2px;color:var(--gold);
+  margin-bottom:8px;padding-bottom:4px;border-bottom:1px solid var(--bdr2);}
+.sp-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:7px;}
+.sp-label{font-size:11px;color:var(--tx2)}
+.sp-val{font-size:11px;color:var(--tx3);font-family:'JetBrains Mono',monospace;min-width:36px;text-align:right}
+input[type=range]{-webkit-appearance:none;width:120px;height:3px;
+  background:var(--bdr);border-radius:2px;outline:none;}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:14px;height:14px;
+  border-radius:50%;background:var(--gold);cursor:pointer;}
+.sp-info{font-size:11px;color:var(--tx3);line-height:1.6;padding:6px 0}
+.sp-info a{color:var(--gold);text-decoration:none}
+.sp-badge{background:var(--gold-b);border:1px solid var(--bdr2);border-radius:8px;
+  padding:2px 8px;font-size:9px;color:var(--tx3);font-family:'Cinzel',serif;letter-spacing:1px}
 
 /* ── CONTROLS ROW ── */
 #ctrl{background:var(--bg1);border-top:1px solid var(--bdr2);
@@ -180,8 +275,24 @@ pre:hover .cpbtn{display:block}.cpbtn:hover{color:var(--gold)}
   <div class="mtog">
     <button class="mb" id="b-claude" onclick="setModel('claude')">CLAUDE</button>
     <button class="mb" id="b-gemini" onclick="setModel('gemini')">GEMINI</button>
-    <button class="mb" id="b-gpt"    onclick="setModel('gpt')">GPT</button>
   </div>
+  <!-- BTR 알림 버튼 (GPT 대체) -->
+  <div id="btr-wrap">
+    <button id="btr-btn" onclick="toggleBtr()" title="BTR 파이프라인 알림">
+      🔔 BTR
+      <span id="btr-badge"></span>
+    </button>
+  </div>
+</div>
+
+<!-- BTR NOTIFICATION PANEL -->
+<div id="btr-panel">
+  <div id="btr-panel-hdr">
+    <span class="btr-title">🔔 BTR 파이프라인 알림</span>
+    <button id="btr-close" onclick="toggleBtr()">CLOSE ✕</button>
+  </div>
+  <div id="btr-cards"></div>
+  <div id="btr-empty" style="display:none">대기 중인 알림이 없습니다</div>
 </div>
 
 <!-- FREESTYLE 배너 -->
@@ -210,6 +321,34 @@ pre:hover .cpbtn{display:block}.cpbtn:hover{color:var(--gold)}
   <textarea id="sys-ta" placeholder="추가 시스템 지시 (기본 프롬프트에 append)"></textarea>
 </div>
 
+<!-- SETTINGS PANEL -->
+<div id="settings-panel">
+  <div class="sp-section">
+    <div class="sp-title">⚙ TTS 설정 <span class="sp-badge">Web Speech</span></div>
+    <div class="sp-row">
+      <span class="sp-label">속도</span>
+      <input type="range" id="tts-rate" min="0.5" max="2" step="0.1" value="1.0" oninput="updateTtsParam()"/>
+      <span class="sp-val" id="tts-rate-val">1.0x</span>
+    </div>
+    <div class="sp-row">
+      <span class="sp-label">피치</span>
+      <input type="range" id="tts-pitch" min="0.5" max="2" step="0.1" value="1.0" oninput="updateTtsParam()"/>
+      <span class="sp-val" id="tts-pitch-val">1.0</span>
+    </div>
+    <div class="sp-info">
+      현재는 기기 내장 TTS 엔진을 사용합니다. 고품질 한국어 모델(Supertonic 3)은 Phase 2에서 업로드 방식으로 적용됩니다.<br>
+      모델 다운로드: <a href="https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/sherpa-onnx-supertonic-3-tts-int8-2026-05-11.tar.bz2" target="_blank">supertonic-3-int8</a>
+    </div>
+  </div>
+  <div class="sp-section">
+    <div class="sp-title">📡 알림 설정</div>
+    <div class="sp-row">
+      <span class="sp-label">폴링 주기</span>
+      <span class="sp-val" id="poll-interval-val">30초</span>
+    </div>
+  </div>
+</div>
+
 <!-- CONTROLS ROW -->
 <div id="ctrl">
   <div id="kb-chip" onclick="reloadKB()" title="지식베이스 새로고침">
@@ -218,6 +357,7 @@ pre:hover .cpbtn{display:block}.cpbtn:hover{color:var(--gold)}
   </div>
   <button class="cbtn" id="sys-btn" onclick="toggleSys()">SYS</button>
   <button class="cbtn" id="free-btn" onclick="toggleFree()">FREE</button>
+  <button class="cbtn" id="settings-btn" onclick="toggleSettings()">⚙</button>
   <span class="mcp-badge" id="mcp-badge"></span>
   <button class="cbtn" id="new-btn" onclick="newChat()">+ NEW</button>
 </div>
@@ -231,7 +371,7 @@ pre:hover .cpbtn{display:block}.cpbtn:hover{color:var(--gold)}
     <button id="send" onclick="send()">↑</button>
   </div>
   <div class="hint-row">
-    <span>Enter 전송 · Shift+Enter 줄바꿈</span>
+    <span>Enter 줄바꿈 · ↑ 버튼 전송</span>
     <span id="cc"></span>
   </div>
 </div>
@@ -239,25 +379,42 @@ pre:hover .cpbtn{display:block}.cpbtn:hover{color:var(--gold)}
 <div id="toast"></div>
 
 <script>
-/* ── STATE ── */
+/* ══════════════════════════════════════════════
+   STATE
+══════════════════════════════════════════════ */
 const S = { model:'claude', messages:[], streaming:false, freestyle:false };
+const TTS = { rate:1.0, pitch:1.0, utterance:null, activeBtn:null };
+let pendingNotifs = [], btrOpen = false, notifTimer = null;
 
 const MODEL_STYLE = {
   claude: { avClass:'a-claude', whoClass:'claude', label:'CLAUDE', icon:'✦' },
   gemini: { avClass:'a-gemini', whoClass:'gemini', label:'GEMINI', icon:'◈' },
-  gpt:    { avClass:'a-gpt',    whoClass:'gpt',    label:'GPT',    icon:'⬡' },
 };
 
-/* ── INIT ── */
+/* ══════════════════════════════════════════════
+   INIT
+══════════════════════════════════════════════ */
 function init() {
   try {
-    const d = JSON.parse(localStorage.getItem('ah-v26') || '{}');
-    S.model    = d.model    || 'claude';
+    const d = JSON.parse(localStorage.getItem('ah-v33') || '{}');
+    S.model     = d.model    || 'claude';
     S.freestyle = d.freestyle || false;
+    TTS.rate    = d.ttsRate  || 1.0;
+    TTS.pitch   = d.ttsPitch || 1.0;
   } catch(_) {}
+
   setModel(S.model, false);
   if (S.freestyle) applyFreestyle(false);
+
+  // TTS 슬라이더 초기값
+  document.getElementById('tts-rate').value  = TTS.rate;
+  document.getElementById('tts-pitch').value = TTS.pitch;
+  document.getElementById('tts-rate-val').textContent  = TTS.rate+'x';
+  document.getElementById('tts-pitch-val').textContent = TTS.pitch+'';
+
   checkStatus();
+  pollNotifications();
+
   marked.setOptions({
     breaks:true, gfm:true,
     highlight:(code,lang)=>{
@@ -266,16 +423,23 @@ function init() {
     }
   });
 }
-function save() { localStorage.setItem('ah-v26', JSON.stringify({model:S.model,freestyle:S.freestyle})); }
 
-/* ── STATUS ── */
+function save() {
+  localStorage.setItem('ah-v33', JSON.stringify({
+    model:S.model, freestyle:S.freestyle, ttsRate:TTS.rate, ttsPitch:TTS.pitch
+  }));
+}
+
+/* ══════════════════════════════════════════════
+   STATUS
+══════════════════════════════════════════════ */
 async function checkStatus() {
   try {
     const d = await (await fetch('/api/status')).json();
     const s = d.drive?.status || '';
-    if (s.startsWith('loaded'))     setKB(`KB ${d.drive?.chars > 0 ? '연결됨' : '0'}`, '#5a8a6a');
-    else if (s.includes('error'))   setKB('KB 오류', '#9a5040');
-    else                            setKB('KB 미설정', '#6b5c44');
+    if      (s.startsWith('loaded')) setKB(`KB ${d.drive?.chars > 0 ? '연결됨' : '0'}`, '#5a8a6a');
+    else if (s.includes('error'))    setKB('KB 오류', '#9a5040');
+    else                             setKB('KB 미설정', '#6b5c44');
     const n = d.mcp?.tools || 0;
     document.getElementById('mcp-badge').textContent = n > 0 ? `${n} tools` : '';
   } catch(_) { setKB('오류','#9a5040'); }
@@ -290,17 +454,22 @@ async function reloadKB(){
   catch(e){ toast('실패: '+e.message); }
 }
 
-/* ── MODEL ── */
+/* ══════════════════════════════════════════════
+   MODEL
+══════════════════════════════════════════════ */
 function setModel(m, sv=true) {
+  if (!MODEL_STYLE[m]) return;  // BTR 등 비모델 선택 방지
   S.model = m;
-  ['claude','gemini','gpt'].forEach(k => {
+  ['claude','gemini'].forEach(k => {
     const btn = document.getElementById(`b-${k}`);
-    btn.className = 'mb' + (k === m ? ` on-${k}` : '');
+    if (btn) btn.className = 'mb' + (k === m ? ` on-${k}` : '');
   });
   if (sv) save();
 }
 
-/* ── FREESTYLE ── */
+/* ══════════════════════════════════════════════
+   FREESTYLE
+══════════════════════════════════════════════ */
 function toggleFree(){ S.freestyle=!S.freestyle; applyFreestyle(true); save(); }
 function applyFreestyle(showToast){
   document.getElementById('free-btn').classList.toggle('on-red', S.freestyle);
@@ -308,10 +477,146 @@ function applyFreestyle(showToast){
   if(showToast) toast(S.freestyle ? '페르소나 해제 — Freestyle ON' : '페르소나 복원됨');
 }
 
-/* ── CHAT ── */
+/* ══════════════════════════════════════════════
+   BTR NOTIFICATIONS
+══════════════════════════════════════════════ */
+async function pollNotifications() {
+  try {
+    const r = await fetch('/api/notifications');
+    if (r.ok) {
+      const data = await r.json();
+      pendingNotifs = data.notifications || [];
+      updateBtrBadge();
+      if (btrOpen) renderBtrCards();
+    }
+  } catch(_) {}
+  notifTimer = setTimeout(pollNotifications, 30000);
+}
+
+function updateBtrBadge() {
+  const badge = document.getElementById('btr-badge');
+  const btn   = document.getElementById('btr-btn');
+  if (pendingNotifs.length > 0) {
+    badge.textContent = pendingNotifs.length;
+    badge.style.display = 'inline';
+    btn.classList.add('has-notif');
+  } else {
+    badge.style.display = 'none';
+    btn.classList.remove('has-notif');
+  }
+}
+
+function toggleBtr() {
+  btrOpen = !btrOpen;
+  document.getElementById('btr-panel').classList.toggle('open', btrOpen);
+  document.getElementById('btr-btn').classList.toggle('active', btrOpen);
+  if (btrOpen) renderBtrCards();
+}
+
+function getTypeLabel(type) {
+  const map = {
+    info_request: '정보 요청',
+    phase_confirm: 'Phase 확정',
+    report_complete: '보고서 완료',
+    rubric_held: '루브릭 보류',
+    sclass_reached: 'S-Class 달성',
+  };
+  return map[type] || type;
+}
+
+function renderBtrCards() {
+  const container = document.getElementById('btr-cards');
+  const emptyEl   = document.getElementById('btr-empty');
+
+  if (pendingNotifs.length === 0) {
+    container.innerHTML = '';
+    emptyEl.style.display = 'block';
+    return;
+  }
+  emptyEl.style.display = 'none';
+
+  container.innerHTML = pendingNotifs.map(n => `
+    <div class="nc" id="nc-${esc(n.id)}">
+      <div class="nc-hdr">
+        <div class="nc-meta">
+          <span class="nc-type">${getTypeLabel(n.type)}</span>
+          <span class="nc-session">${esc(n.session_id)}</span>
+        </div>
+        <div class="nc-meta" style="gap:8px">
+          <span class="nc-time">${n.created_at ? new Date(n.created_at).toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'}) : ''}</span>
+          <button class="nc-dismiss" title="알림 삭제" onclick="askDismiss('${esc(n.id)}')">✕</button>
+        </div>
+      </div>
+      <div class="nc-title">${esc(n.title)}</div>
+      <div class="nc-content">${esc(n.content)}</div>
+      <div class="nc-reply">
+        <textarea class="nc-ta" id="nc-ta-${esc(n.id)}"
+          placeholder="Gemini에게 응답을 입력하세요..."></textarea>
+        <button class="nc-send" onclick="replyToNotif('${esc(n.id)}','${esc(n.title)}','${esc(n.content)}')">전송 →</button>
+      </div>
+      <div class="nc-confirm" id="nc-confirm-${esc(n.id)}">
+        <p>이 알림을 삭제하면 해당 BTR 루브릭이 종료됩니다.<br>계속하시겠습니까?</p>
+        <div class="nc-confirm-btns">
+          <button class="nc-yes" onclick="confirmDismiss('${esc(n.id)}')">삭제</button>
+          <button class="nc-no" onclick="cancelDismiss('${esc(n.id)}')">취소</button>
+        </div>
+      </div>
+    </div>
+  `).join('');
+}
+
+function askDismiss(id) {
+  document.getElementById(`nc-confirm-${id}`)?.classList.add('show');
+}
+function cancelDismiss(id) {
+  document.getElementById(`nc-confirm-${id}`)?.classList.remove('show');
+}
+async function confirmDismiss(id) {
+  try {
+    await fetch(`/api/notifications/${encodeURIComponent(id)}`, { method:'DELETE' });
+    pendingNotifs = pendingNotifs.filter(n => n.id !== id);
+    updateBtrBadge();
+    renderBtrCards();
+    toast('알림이 삭제되었습니다');
+  } catch(e) { toast('삭제 실패: '+e.message); }
+}
+
+async function replyToNotif(id, title, content) {
+  const ta = document.getElementById(`nc-ta-${id}`);
+  const replyText = ta ? ta.value.trim() : '';
+  if (!replyText) { toast('응답 내용을 입력해주세요'); return; }
+
+  // 알림 상태 업데이트
+  try { await fetch(`/api/notifications/${encodeURIComponent(id)}/respond`, { method:'POST' }); }
+  catch(_) {}
+
+  // Gemini에게 컨텍스트와 함께 전달
+  const msgWithContext = `[BTR 파이프라인 알림 응답]\n유형: ${title}\n내용: ${content}\n\n내 응답: ${replyText}`;
+
+  // BTR 패널 닫고 Gemini로 전환
+  if (btrOpen) toggleBtr();
+  setModel('gemini');
+
+  const em = document.getElementById('empty');
+  if (em) em.remove();
+  S.messages.push({ role:'user', content:msgWithContext });
+  appendMsg('user', msgWithContext);
+
+  // 알림 카드 제거
+  pendingNotifs = pendingNotifs.filter(n => n.id !== id);
+  updateBtrBadge();
+
+  await streamAI();
+}
+
+/* ══════════════════════════════════════════════
+   CHAT
+══════════════════════════════════════════════ */
 function newChat(){
   S.messages = [];
   document.getElementById('msgs').innerHTML = emptyHTML();
+  // TTS 중지
+  if (window.speechSynthesis) window.speechSynthesis.cancel();
 }
 function emptyHTML(){
   return `<div id="empty">
@@ -350,6 +655,7 @@ async function streamAI(){
   cntEl.parentElement.insertBefore(pillsEl,cntEl);
   const toolPills={};
   const sys=document.getElementById('sys-ta').value;
+  let full = '';
 
   try{
     const res=await fetch('/api/chat',{
@@ -359,7 +665,7 @@ async function streamAI(){
     if(!res.ok) throw new Error(`HTTP ${res.status}: ${(await res.text()).slice(0,200)}`);
 
     const reader=res.body.getReader(), decoder=new TextDecoder();
-    let buf='', full='', first=true;
+    let buf='', first=true;
 
     while(true){
       const{done,value}=await reader.read(); if(done) break;
@@ -403,15 +709,89 @@ async function streamAI(){
   }
 
   cntEl.classList.remove('cur');
+
+  // TTS 재생 버튼 추가 (AI 응답에만)
+  if (full) addTtsBtn(aiRow, full);
+
   S.streaming=false;
   document.getElementById('send').disabled=false;
   document.getElementById('uinput').focus();
 }
 
-/* ── DOM ── */
+/* ══════════════════════════════════════════════
+   TTS (Web Speech API)
+══════════════════════════════════════════════ */
+function updateTtsParam() {
+  TTS.rate  = parseFloat(document.getElementById('tts-rate').value);
+  TTS.pitch = parseFloat(document.getElementById('tts-pitch').value);
+  document.getElementById('tts-rate-val').textContent  = TTS.rate.toFixed(1)+'x';
+  document.getElementById('tts-pitch-val').textContent = TTS.pitch.toFixed(1);
+  save();
+}
+
+function addTtsBtn(row, text) {
+  const mb2 = row.querySelector('.mb2');
+  const btn = document.createElement('button');
+  btn.className = 'tts-btn';
+  btn.innerHTML = '▶ 재생';
+  btn.title = 'TTS 음성 재생';
+  btn.onclick = () => speakText(text, btn);
+  mb2.appendChild(btn);
+}
+
+function speakText(text, btnEl) {
+  const synth = window.speechSynthesis;
+  if (!synth) { toast('이 브라우저는 TTS를 지원하지 않습니다'); return; }
+
+  // 같은 버튼 재클릭 → 정지
+  if (synth.speaking && TTS.activeBtn === btnEl) {
+    synth.cancel();
+    btnEl.innerHTML = '▶ 재생';
+    btnEl.classList.remove('playing');
+    TTS.activeBtn = null;
+    return;
+  }
+
+  // 다른 버튼이 재생 중 → 정지 후 새로 시작
+  if (synth.speaking) {
+    synth.cancel();
+    if (TTS.activeBtn) {
+      TTS.activeBtn.innerHTML = '▶ 재생';
+      TTS.activeBtn.classList.remove('playing');
+    }
+  }
+
+  // 마크다운 제거 후 TTS
+  const clean = text
+    .replace(/#{1,6}\s/g,'').replace(/\*\*([^*]+)\*\*/g,'$1')
+    .replace(/\*([^*]+)\*/g,'$1').replace(/`[^`]+`/g,'').replace(/\n+/g,' ')
+    .replace(/\[([^\]]+)\]\([^)]+\)/g,'$1').trim();
+
+  const utt = new SpeechSynthesisUtterance(clean);
+  utt.lang  = 'ko-KR';
+  utt.rate  = TTS.rate;
+  utt.pitch = TTS.pitch;
+
+  TTS.utterance = utt;
+  TTS.activeBtn = btnEl;
+  btnEl.innerHTML = '⏸ 정지';
+  btnEl.classList.add('playing');
+
+  utt.onend = utt.onerror = () => {
+    btnEl.innerHTML = '▶ 재생';
+    btnEl.classList.remove('playing');
+    TTS.activeBtn = null;
+  };
+
+  synth.speak(utt);
+}
+
+/* ══════════════════════════════════════════════
+   DOM HELPERS
+══════════════════════════════════════════════ */
 function appendMsg(role,content,empty){
   const isU=role==='user';
-  const ms=MODEL_STYLE[S.model];
+  const ms=MODEL_STYLE[S.model] || MODEL_STYLE.claude;
   const now=new Date().toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'});
   const row=document.createElement('div'); row.className='row';
   row.innerHTML=`
@@ -440,12 +820,31 @@ function addCopyBtns(){
 }
 function scrollBot(){ const e=document.getElementById('msgs'); e.scrollTop=e.scrollHeight; }
 
-/* ── UI ── */
-function onKey(e){ if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();send();} }
+/* ══════════════════════════════════════════════
+   UI CONTROLS
+══════════════════════════════════════════════ */
+// ★ 엔터키 = 줄바꿈, ↑ 버튼 = 전송 (기존과 반대)
+function onKey(e){
+  // Ctrl+Enter or Cmd+Enter = 전송
+  if(e.key==='Enter'&&(e.ctrlKey||e.metaKey)){e.preventDefault();send();}
+  // 그 외 Enter = 기본 줄바꿈 (preventDefault 없음)
+}
 function resize(el){ el.style.height='22px'; el.style.height=Math.min(el.scrollHeight,160)+'px'; }
 function countChars(){ const n=document.getElementById('uinput').value.length; document.getElementById('cc').textContent=n>0?n.toLocaleString():''; }
 function useChip(el){ const t=document.getElementById('uinput'); t.value=el.textContent; resize(t); countChars(); t.focus(); }
-function toggleSys(){ const p=document.getElementById('sys-panel'),b=document.getElementById('sys-btn'),o=!p.classList.contains('open'); p.classList.toggle('open',o); b.classList.toggle('on',o); }
+function toggleSys(){
+  const p=document.getElementById('sys-panel'),b=document.getElementById('sys-btn');
+  const o=!p.classList.contains('open');
+  p.classList.toggle('open',o); b.classList.toggle('on',o);
+  // 다른 패널 닫기
+  if(o){ document.getElementById('settings-panel').classList.remove('open'); document.getElementById('settings-btn').classList.remove('on'); }
+}
+function toggleSettings(){
+  const p=document.getElementById('settings-panel'),b=document.getElementById('settings-btn');
+  const o=!p.classList.contains('open');
+  p.classList.toggle('open',o); b.classList.toggle('on',o);
+  if(o){ document.getElementById('sys-panel').classList.remove('open'); document.getElementById('sys-btn').classList.remove('on'); }
+}
 function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 function toast(msg,ms=3200){ const e=document.getElementById('toast'); e.textContent=msg; e.classList.add('on'); setTimeout(()=>e.classList.remove('on'),ms); }
 
