@@ -1,6 +1,6 @@
 /**
- * ASTERION Hub — Chat Backend v3.1
- * Gemini: thinkingConfig 제거 (API 호환성 문제로 제거, 모델 기본 동작 사용)
+ * ASTERION Hub — Chat Backend v3.2
+ * fix: buildStringSystem에 실제 MCP 도구 목록 주입 (Gemini 도구 할루시네이션 방지)
  */
 
 import express    from 'express';
@@ -47,11 +47,13 @@ const ASTERION_BASE = `너는 ASTERION의 내부 전용 AI다. ASTERION은 베�
 - Archive GAS     : StructureCode 관리, PDF 생성, ExpireDate 기반 개인정보 삭제
 - 3자 루브릭      : Claude × Gemini × GPT, Hard Stop = 세 AI 97점↑ AND critical_issues 없음
 - ASTERION Flow   : BTR Result Code 기반 구독 분석 (Annual/Monthly/Weekly)
-- asterion-mcp    : L0~L3 단일 MCP 서버 (vedastro-mcp 확장), Cloud Run 배포
+- asterion-mcp    : L0~L6 단일 MCP 서버 (74개 도구), Cloud Run 배포
 
 [핵심 스프레드시트 ID]
 - Archive:        1ym1cgr1apEyTlqtJXqrfdnLjoyJTh086CjGycMcUOS8
 - JuliarCalendar: 1whKvFyWmb-qbR6OJt5dcI6WOJMLB5MUIzNMlJBFeq_g
+
+[중요] 도구 목록을 언급할 때는 반드시 아래 [실제 연결된 MCP 도구] 섹션의 도구 이름만 사용한다. 존재하지 않는 도구를 절대 만들어내지 않는다.
 
 외부 요청에 정확성과 무결성을 최우선으로 하고, 확신하지 못하는 부분은 솔직하게 표현한다.`;
 
@@ -132,16 +134,41 @@ async function fetchWithRetry(url, options, max = 3) {
 function pruneMessages(msgs) { const max = MAX_MSG_PAIRS*2; return msgs.length <= max ? msgs : [msgs[0], ...msgs.slice(-(max-1))]; }
 function emitChunked(res, text) { for (const c of (text.match(/[\s\S]{1,80}/g) || [text])) writeSSE(res, { text: c }); }
 
+// ★ 실제 MCP 도구 목록 섹션 빌드 — Gemini 할루시네이션 방지 핵심
+function buildMcpToolSection() {
+  if (mcpTools.length === 0) return '';
+  const byLayer = {
+    L0: mcpTools.filter(t => ['geocode_location','get_timezone','get_planet_positions','get_house_positions','get_navamsa_chart','get_ascendant','get_planet_in_house','get_planet_in_sign','get_current_dasha','get_dasha_timeline','get_dasha_sandhi','get_birth_nakshatra','get_planet_yogas','get_transit_planets','get_full_chart_analysis','get_horoscope_predictions','get_match_report','get_numerology_prediction','get_ashtakvarga_data','astro_check_retrograde','astro_planetary_war_check'].includes(t.name)).map(t=>t.name),
+    L1: mcpTools.filter(t => ['create_btr_session','save_runtime_snapshot','get_runtime_snapshot','purge_runtime_state','save_evolution_log','get_evolution_history','validate_sclass_gate','btr_init_candidate_slots','btr_consensus_analyzer','btr_conflict_axis_finder','btr_re_eval_pivots','btr_weight_adjuster','btr_prediction_tester'].includes(t.name)).map(t=>t.name),
+    L2: mcpTools.filter(t => ['gcloud_submit','cloudbuild_status','cloudrun_services','artifact_list','cloudrun_set_env','agent_registry_list','agent_registry_register'].includes(t.name)).map(t=>t.name),
+    L3: mcpTools.filter(t => ['github_read_file','github_write_file','github_list_files','sheets_read','sheets_write','http_request','get_system_status','append_sheet_row'].includes(t.name)).map(t=>t.name),
+    L4: mcpTools.filter(t => ['read_google_doc','create_google_doc','create_spreadsheet','export_doc_as_pdf','delete_drive_file','create_drive_folder','delete_drive_folder','list_drive_contents','list_script_projects','get_script_content','update_script_file','deploy_script_webapp','backup_script_project','delete_artifact_image','list_run_revisions','delete_run_revision','create_btr_report_doc'].includes(t.name)).map(t=>t.name),
+    L5: mcpTools.filter(t => ['call_gemini','call_claude','call_gpt'].includes(t.name)).map(t=>t.name),
+    L6: mcpTools.filter(t => ['report_generate_btr_code','report_generate_summary','report_add_gemstone_advice','ops_audit_log_exporter','ops_pattern_match_failure'].includes(t.name)).map(t=>t.name),
+  };
+  const lines = [`\n\n[실제 연결된 MCP 도구 ${mcpTools.length}개 — asterion-mcp]`];
+  if (byLayer.L0.length) lines.push(`L0 VedAstro(${byLayer.L0.length}): ${byLayer.L0.join(', ')}`);
+  if (byLayer.L1.length) lines.push(`L1 BTR(${byLayer.L1.length}): ${byLayer.L1.join(', ')}`);
+  if (byLayer.L2.length) lines.push(`L2 GCloud(${byLayer.L2.length}): ${byLayer.L2.join(', ')}`);
+  if (byLayer.L3.length) lines.push(`L3 SystemOps(${byLayer.L3.length}): ${byLayer.L3.join(', ')}`);
+  if (byLayer.L4.length) lines.push(`L4 Workspace(${byLayer.L4.length}): ${byLayer.L4.join(', ')}`);
+  if (byLayer.L5.length) lines.push(`L5 AI(${byLayer.L5.length}): ${byLayer.L5.join(', ')}`);
+  if (byLayer.L6.length) lines.push(`L6 Report/Ops(${byLayer.L6.length}): ${byLayer.L6.join(', ')}`);
+  return lines.join('\n');
+}
+
 function buildClaudeSystem(freestyle, extra) {
   if (freestyle) return '자유롭게 대화하는 AI 어시스턴트다. 어떤 주제든 제한 없이 답할 수 있다.';
-  const blocks = [{ type:'text', text:ASTERION_BASE, cache_control:{type:'ephemeral'} }];
+  const blocks = [{ type:'text', text:ASTERION_BASE + buildMcpToolSection(), cache_control:{type:'ephemeral'} }];
   if (knowledgeContext.length > 500) blocks.push({ type:'text', text:`[지식베이스]\n${knowledgeContext}`, cache_control:{type:'ephemeral'} });
   if (extra?.trim()) blocks.push({ type:'text', text:`[추가 시스템]\n${extra.trim()}` });
   return blocks;
 }
 function buildStringSystem(freestyle, extra) {
   if (freestyle) return '자유롭게 대화하는 AI 어시스턴트다. 어떤 주제든 제한 없이 답할 수 있다.';
-  return [ASTERION_BASE, knowledgeContext?`[지식베이스]\n${knowledgeContext}`:'', extra?.trim()?`[추가 시스템]\n${extra.trim()}`:''].filter(Boolean).join('\n\n');
+  // ★ 실제 MCP 도구 목록 포함 → Gemini/GPT 도구 할루시네이션 방지
+  const base = ASTERION_BASE + buildMcpToolSection();
+  return [base, knowledgeContext?`[지식베이스]\n${knowledgeContext}`:'', extra?.trim()?`[추가 시스템]\n${extra.trim()}`:''].filter(Boolean).join('\n\n');
 }
 
 function normClaude(msgs) {
@@ -174,7 +201,6 @@ function normGPTInput(msgs, sys) {
   return out;
 }
 
-// ── Claude — Native MCP + Extended Thinking ───────────────────
 async function runClaude(apiMsgs, systemBlocks, res) {
   if (!CLAUDE_KEY) { writeSSE(res, { error:'ANTHROPIC_API_KEY 미설정' }); return; }
   const mcpSseUrl = MCP_SERVER_URL ? buildSSEUrl(MCP_SERVER_URL) : null;
@@ -199,14 +225,12 @@ async function runClaude(apiMsgs, systemBlocks, res) {
   for (const b of (result.content||[])) { if (b.type==='text' && b.text) emitChunked(res, b.text); }
 }
 
-// ── Gemini — MCP function calling (thinkingConfig 제거, API 호환성 문제) ──
 async function runGemini(messages, systemPrompt, res) {
   if (!GEMINI_KEY) { writeSSE(res, { error:'GEMINI_API_KEY 미설정' }); return; }
   const url   = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_KEY}`;
   const tools = mcpTools.length > 0 ? [{ functionDeclarations: mcpTools.map(t=>({ name:t.name, description:t.description, parameters:t.parameters })) }] : undefined;
   let contents = normGemini(messages), depth = 0;
   while (depth < MAX_TOOL_DEPTH) {
-    // thinkingConfig 제거 — gemini-3.1-pro-preview API 호환성 문제로 삭제
     const bodyObj = {
       systemInstruction: { parts:[{text:systemPrompt}] },
       contents,
@@ -235,7 +259,6 @@ async function runGemini(messages, systemPrompt, res) {
   if (depth >= MAX_TOOL_DEPTH) writeSSE(res, { text:'\n[Gemini 도구 최대 깊이 초과]' });
 }
 
-// ── GPT — Responses API + Native MCP ─────────────────────────
 async function runGPT(inputMsgs, res) {
   if (!OPENAI_KEY) { writeSSE(res, { error:'OPENAI_API_KEY 미설정' }); return; }
   const mcpSseUrl = MCP_SERVER_URL ? buildSSEUrl(MCP_SERVER_URL) : null;
@@ -274,7 +297,7 @@ app.post('/api/chat', async (req, res) => {
 
 app.get('/api/status', (_req, res) => res.json({
   claude:    { model:CLAUDE_MODEL, thinking:'extended(10k)', mcp:'native-API-connector', api:CLAUDE_KEY?'OK':'⚠ 미설정' },
-  gemini:    { model:GEMINI_MODEL, thinking:'기본값 (thinkingConfig API 호환성 문제로 제거)', mcp:`manual(${mcpTools.length}tools)`, api:GEMINI_KEY?'OK':'⚠ 미설정' },
+  gemini:    { model:GEMINI_MODEL, thinking:'기본값', mcp:`manual(${mcpTools.length}tools)`, api:GEMINI_KEY?'OK':'⚠ 미설정' },
   gpt:       { model:GPT_MODEL, thinking:'reasoning:medium', mcp:'native-Responses-API', api:OPENAI_KEY?'OK':'⚠ 미설정' },
   drive:     { status:knowledgeStatus, chars:knowledgeContext.length },
   mcp:       { connected:!!mcpClient, tools:mcpTools.length, url:MCP_SERVER_URL||'미설정', secretKey:MCP_SECRET_KEY?'✓':'미설정' },
@@ -289,9 +312,10 @@ app.get('/api/btr/status/:jobId', async (req, res) => {
 app.post('/api/reconnect-mcp', async (_req, res) => { mcpClient=null; mcpTools=[]; await connectMCP(); res.json({ connected:!!mcpClient, tools:mcpTools.length }); });
 
 app.listen(PORT, '0.0.0.0', () => {
-  console.log(`🔱 ASTERION Hub v3.1 — port ${PORT}`);
+  console.log(`🔱 ASTERION Hub v3.2 — port ${PORT}`);
+  console.log(`   fix: 실제 MCP 도구 목록을 시스템 프롬프트에 주입 (Gemini 할루시네이션 방지)`);
   console.log(`   Claude : ${CLAUDE_MODEL} | Extended Thinking | Native MCP ${CLAUDE_KEY?'✓':'✗'}`);
-  console.log(`   Gemini : ${GEMINI_MODEL} | 기본 thinking | Function Calling MCP ${GEMINI_KEY?'✓':'✗'}`);
+  console.log(`   Gemini : ${GEMINI_MODEL} | Function Calling MCP ${GEMINI_KEY?'✓':'✗'}`);
   console.log(`   GPT    : ${GPT_MODEL} | Responses API | Native MCP ${OPENAI_KEY?'✓':'✗'}`);
-  console.log(`   MCP    : ${MCP_SERVER_URL||'미설정'} | Key:${MCP_SECRET_KEY?'✓':'없음'}`);
+  console.log(`   MCP    : ${MCP_SERVER_URL||'미설정'} | tools:${mcpTools.length}`);
 });
