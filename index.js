@@ -1,7 +1,8 @@
 /**
- * ASTERION Hub — Chat Backend v3.3
- * + BTR Notifications API (BTRNotifications sheet 연동)
- * + GPT 제거, 알림 엔드포인트 추가
+ * ASTERION Hub — Chat Backend v3.4
+ * - 알림: Short Polling → Server-Sent Events (SSE) 방식으로 전환
+ *   백엔드가 5초마다 시트를 체크, 변경 시 연결된 모든 클라이언트에 브로드캐스트
+ * - 클라이언트는 EventSource 하나만 유지 (모바일 배터리 절약)
  */
 
 import express    from 'express';
@@ -24,28 +25,24 @@ app.set('trust proxy', true);
 app.use(express.static(join(__dirname, 'static')));
 app.get('/', (_req, res) => res.sendFile(join(__dirname, 'static', 'index.html')));
 
-const PORT = process.env.PORT || 8080;
-
-const CLAUDE_KEY = process.env.ANTHROPIC_API_KEY || '';
-const GEMINI_KEY = process.env.GEMINI_API_KEY    || '';
-const OPENAI_KEY = process.env.OPENAI_API_KEY    || '';
-
-const CLAUDE_MODEL = 'claude-sonnet-4-6';
-const GEMINI_MODEL = 'gemini-3.1-pro-preview';
-const GPT_MODEL    = 'gpt-5.5';
-
+const PORT            = process.env.PORT || 8080;
+const CLAUDE_KEY      = process.env.ANTHROPIC_API_KEY || '';
+const GEMINI_KEY      = process.env.GEMINI_API_KEY    || '';
+const OPENAI_KEY      = process.env.OPENAI_API_KEY    || '';
+const CLAUDE_MODEL    = 'claude-sonnet-4-6';
+const GEMINI_MODEL    = 'gemini-3.1-pro-preview';
+const GPT_MODEL       = 'gpt-5.5';
 const DRIVE_FOLDER_ID = process.env.ASTERION_KNOWLEDGE_FOLDER_ID || '';
 const MCP_SERVER_URL  = process.env.MCP_SERVER_URL  || '';
 const BTR_SERVER_URL  = process.env.BTR_SERVER_URL  || '';
 const MCP_SECRET_KEY  = process.env.MCP_SECRET_KEY  || '';
 const ARCHIVE_SS_ID   = '1ym1cgr1apEyTlqtJXqrfdnLjoyJTh086CjGycMcUOS8';
 const NOTIF_SHEET     = 'BTRNotifications';
-
-const MAX_MSG_PAIRS  = 20;
-const MAX_TOOL_DEPTH = 8;
+const MAX_MSG_PAIRS   = 20;
+const MAX_TOOL_DEPTH  = 8;
 
 // ────────────────────────────────────────────────────────────
-// GCP ADC 토큰 (Cloud Run 메타데이터 서버)
+// GCP ADC 토큰
 // ────────────────────────────────────────────────────────────
 async function getGCPToken() {
   try {
@@ -107,7 +104,6 @@ loadDriveKnowledge();
 // MCP Client
 // ────────────────────────────────────────────────────────────
 let mcpClient = null, mcpTools = [], mcpRetryTimer = null;
-
 function buildSSEUrl(u) { const s = u.replace(/\/$/, ''); return s.endsWith('/sse') ? s : s + '/sse'; }
 
 async function connectMCP() {
@@ -136,10 +132,9 @@ async function callMCPTool(name, input) {
 }
 
 // ────────────────────────────────────────────────────────────
-// BTR Notifications (Archive!BTRNotifications 시트)
-// 컬럼: id | session_id | type | title | content | status | created_at
+// BTR Notifications — Sheets CRUD
 // ────────────────────────────────────────────────────────────
-async function getBTRNotifications() {
+async function fetchBTRNotifications() {
   const tok = await getGCPToken();
   if (!tok) return [];
   try {
@@ -151,7 +146,7 @@ async function getBTRNotifications() {
     const rows = ((await r.json()).values) || [];
     if (rows.length < 2) return [];
     return rows.slice(1)
-      .map((row, i) => ({
+      .map((row) => ({
         id:         row[0] || '',
         session_id: row[1] || '',
         type:       row[2] || 'info_request',
@@ -159,7 +154,6 @@ async function getBTRNotifications() {
         content:    row[4] || '',
         status:     row[5] || 'pending',
         created_at: row[6] || '',
-        rowIndex:   i + 2   // 1-based, row 1 = header
       }))
       .filter(n => n.id && n.status === 'pending');
   } catch(e) { console.error('[Notif GET]', e.message); return []; }
@@ -177,15 +171,42 @@ async function updateNotifStatus(id, status) {
     const rows = ((await r.json()).values) || [];
     const rowIdx = rows.findIndex((row, i) => i > 0 && row[0] === id);
     if (rowIdx < 0) return false;
-    // F 컬럼 (index 5) = status, 1-based row = rowIdx+1
     await fetch(
-      `https://sheets.googleapis.com/v4/spreadsheets/${ARCHIVE_SS_ID}/values/${encodeURIComponent(`${NOTIF_SHEET}!F${rowIdx+1}`)}?valueInputOption=RAW`,
+      `https://sheets.googleapis.com/v4/spreadsheets/${ARCHIVE_SS_ID}/values/${encodeURIComponent(`${NOTIF_SHEET}!F${rowIdx + 1}`)}?valueInputOption=RAW`,
       { method: 'PUT', headers: { Authorization: `Bearer ${tok}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({ values: [[status]] }) }
     );
     return true;
   } catch(e) { console.error('[Notif UPDATE]', e.message); return false; }
 }
+
+// ────────────────────────────────────────────────────────────
+// SSE 브로드캐스터 — 서버가 5초마다 시트를 체크, 변경 시 전송
+// (클라이언트는 EventSource 하나만 유지 → 배터리/네트워크 절약)
+// ────────────────────────────────────────────────────────────
+const notifClients  = new Set();
+let   lastNotifHash = '';
+
+function sendToAll(data) {
+  const payload = `data: ${JSON.stringify(data)}\n\n`;
+  for (const res of notifClients) {
+    try { res.write(payload); } catch(_) { notifClients.delete(res); }
+  }
+}
+
+async function notifBackgroundPoll() {
+  try {
+    const notifs  = await fetchBTRNotifications();
+    const hash    = notifs.map(n => n.id).sort().join(',');
+    if (hash !== lastNotifHash) {
+      lastNotifHash = hash;
+      sendToAll({ notifications: notifs });
+      console.log(`[Notif] 변경 감지 → ${notifs.length}건 브로드캐스트`);
+    }
+  } catch(_) {}
+  setTimeout(notifBackgroundPoll, 5000);   // 5초마다 체크
+}
+notifBackgroundPoll();
 
 // ────────────────────────────────────────────────────────────
 // System Prompt Builders
@@ -365,13 +386,55 @@ app.post('/api/chat', async (req, res) => {
   writeDone(res); res.end();
 });
 
+// ★ 알림 SSE 스트림 (클라이언트는 EventSource로 연결, 서버가 변경 시에만 전송)
+app.get('/api/notifications/stream', (req, res) => {
+  res.setHeader('Content-Type',  'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection',    'keep-alive');
+  res.setHeader('X-Accel-Buffering', 'no');
+  // 연결 즉시 현재 알림 목록 전송
+  fetchBTRNotifications().then(notifs => {
+    res.write(`data: ${JSON.stringify({ notifications: notifs })}\n\n`);
+    lastNotifHash = notifs.map(n => n.id).sort().join(',');
+  }).catch(()=>{ res.write('data: {"notifications":[]}\n\n'); });
+  notifClients.add(res);
+  req.on('close', () => notifClients.delete(res));
+  console.log(`[NotifSSE] 클라이언트 연결 (총 ${notifClients.size}개)`);
+});
+
+// 폴백: 일회성 GET (EventSource 미지원 환경용)
+app.get('/api/notifications', async (_req, res) => {
+  res.json({ notifications: await fetchBTRNotifications() });
+});
+
+app.post('/api/notifications/:id/respond', async (req, res) => {
+  const ok = await updateNotifStatus(req.params.id, 'responded');
+  if (ok) {
+    // 즉시 브로드캐스트 트리거
+    const notifs = await fetchBTRNotifications();
+    lastNotifHash = notifs.map(n => n.id).sort().join(',');
+    sendToAll({ notifications: notifs });
+  }
+  res.json({ success: ok });
+});
+
+app.delete('/api/notifications/:id', async (req, res) => {
+  const ok = await updateNotifStatus(req.params.id, 'dismissed');
+  if (ok) {
+    const notifs = await fetchBTRNotifications();
+    lastNotifHash = notifs.map(n => n.id).sort().join(',');
+    sendToAll({ notifications: notifs });
+  }
+  res.json({ success: ok });
+});
+
 app.get('/api/status', (_req, res) => res.json({
   claude:    { model:CLAUDE_MODEL, thinking:'extended(10k)', mcp:'native-API-connector', api:CLAUDE_KEY?'OK':'⚠ 미설정' },
   gemini:    { model:GEMINI_MODEL, thinking:'기본값', mcp:`manual(${mcpTools.length}tools)`, api:GEMINI_KEY?'OK':'⚠ 미설정' },
   gpt:       { model:GPT_MODEL, thinking:'reasoning:medium', mcp:'native-Responses-API', api:OPENAI_KEY?'OK':'⚠ 미설정' },
   drive:     { status:knowledgeStatus, chars:knowledgeContext.length },
   mcp:       { connected:!!mcpClient, tools:mcpTools.length, url:MCP_SERVER_URL||'미설정', secretKey:MCP_SECRET_KEY?'✓':'미설정' },
-  btrServer: { url:BTR_SERVER_URL||'미설정' },
+  notifClients: notifClients.size,
 }));
 
 app.post('/api/reload-knowledge', async (_req, res) => {
@@ -386,30 +449,10 @@ app.post('/api/reconnect-mcp', async (_req, res) => {
   res.json({ connected:!!mcpClient, tools:mcpTools.length });
 });
 
-// ── BTR Notifications ──
-app.get('/api/notifications', async (_req, res) => {
-  res.json({ notifications: await getBTRNotifications() });
-});
-
-app.post('/api/notifications/:id/respond', async (req, res) => {
-  res.json({ success: await updateNotifStatus(req.params.id, 'responded') });
-});
-
-app.delete('/api/notifications/:id', async (req, res) => {
-  res.json({ success: await updateNotifStatus(req.params.id, 'dismissed') });
-});
-
-// (legacy BTR server proxy — 미사용이지만 유지)
-app.post('/api/btr/start', async (req, res) => {
-  if (!BTR_SERVER_URL) return res.json({ error:'BTR_SERVER_URL 미설정' });
-  try { const r = await fetch(`${BTR_SERVER_URL}/btr/start`, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(req.body) }); res.json(await r.json()); }
-  catch (e) { res.status(500).json({ error:e.message }); }
-});
-
 // ────────────────────────────────────────────────────────────
 app.listen(PORT, '0.0.0.0', () => {
-  console.log(`🔱 ASTERION Hub v3.3 — port ${PORT}`);
-  console.log(`   + BTR Notifications API (Archive!BTRNotifications)`);
+  console.log(`🔱 ASTERION Hub v3.4 — port ${PORT}`);
+  console.log(`   알림: SSE 브로드캐스트 방식 (5초 서버 체크 → 변경 시에만 전송)`);
   console.log(`   Claude : ${CLAUDE_MODEL} | Native MCP ${CLAUDE_KEY?'✓':'✗'}`);
   console.log(`   Gemini : ${GEMINI_MODEL} | Function Calling ${GEMINI_KEY?'✓':'✗'}`);
   console.log(`   MCP    : ${MCP_SERVER_URL||'미설정'} | tools:${mcpTools.length}`);
