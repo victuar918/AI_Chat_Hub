@@ -1,6 +1,7 @@
 /**
- * ASTERION Hub — Chat Backend v3.2
- * fix: buildStringSystem에 실제 MCP 도구 목록 주입 (Gemini 도구 할루시네이션 방지)
+ * ASTERION Hub — Chat Backend v3.3
+ * + BTR Notifications API (BTRNotifications sheet 연동)
+ * + GPT 제거, 알림 엔드포인트 추가
  */
 
 import express    from 'express';
@@ -37,10 +38,27 @@ const DRIVE_FOLDER_ID = process.env.ASTERION_KNOWLEDGE_FOLDER_ID || '';
 const MCP_SERVER_URL  = process.env.MCP_SERVER_URL  || '';
 const BTR_SERVER_URL  = process.env.BTR_SERVER_URL  || '';
 const MCP_SECRET_KEY  = process.env.MCP_SECRET_KEY  || '';
+const ARCHIVE_SS_ID   = '1ym1cgr1apEyTlqtJXqrfdnLjoyJTh086CjGycMcUOS8';
+const NOTIF_SHEET     = 'BTRNotifications';
 
 const MAX_MSG_PAIRS  = 20;
 const MAX_TOOL_DEPTH = 8;
 
+// ────────────────────────────────────────────────────────────
+// GCP ADC 토큰 (Cloud Run 메타데이터 서버)
+// ────────────────────────────────────────────────────────────
+async function getGCPToken() {
+  try {
+    const r = await fetch('http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token',
+      { headers: {'Metadata-Flavor':'Google'} });
+    if (!r.ok) return null;
+    return (await r.json()).access_token;
+  } catch { return null; }
+}
+
+// ────────────────────────────────────────────────────────────
+// Drive KB
+// ────────────────────────────────────────────────────────────
 const ASTERION_BASE = `너는 ASTERION의 내부 전용 AI다. ASTERION은 베딕 점성술(Lahiri 아야남샤)과 명리학을 결합한 에너지 공학 기반 분석 엔진이다. BTR(Birth Time Rectification)을 통해 개인 표준시를 확정하고, S-Class(97점↑ Hard Stop) 달성 이후에만 분석 결과물이 생성된다. asterion-mcp의 모든 도구를 자유롭게 사용한다.
 
 [운영 중인 시스템]
@@ -85,6 +103,9 @@ async function loadDriveKnowledge() {
 }
 loadDriveKnowledge();
 
+// ────────────────────────────────────────────────────────────
+// MCP Client
+// ────────────────────────────────────────────────────────────
 let mcpClient = null, mcpTools = [], mcpRetryTimer = null;
 
 function buildSSEUrl(u) { const s = u.replace(/\/$/, ''); return s.endsWith('/sse') ? s : s + '/sse'; }
@@ -114,12 +135,61 @@ async function callMCPTool(name, input) {
   catch (e) { return JSON.stringify({ error: e.message }); }
 }
 
-async function callBTRServer(path, body) {
-  if (!BTR_SERVER_URL) return { error: 'BTR_SERVER_URL 미설정' };
-  try { const r = await fetch(`${BTR_SERVER_URL}${path}`, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body) }); return await r.json(); }
-  catch (e) { return { error: e.message }; }
+// ────────────────────────────────────────────────────────────
+// BTR Notifications (Archive!BTRNotifications 시트)
+// 컬럼: id | session_id | type | title | content | status | created_at
+// ────────────────────────────────────────────────────────────
+async function getBTRNotifications() {
+  const tok = await getGCPToken();
+  if (!tok) return [];
+  try {
+    const r = await fetch(
+      `https://sheets.googleapis.com/v4/spreadsheets/${ARCHIVE_SS_ID}/values/${encodeURIComponent(NOTIF_SHEET)}`,
+      { headers: { Authorization: `Bearer ${tok}` } }
+    );
+    if (!r.ok) return [];
+    const rows = ((await r.json()).values) || [];
+    if (rows.length < 2) return [];
+    return rows.slice(1)
+      .map((row, i) => ({
+        id:         row[0] || '',
+        session_id: row[1] || '',
+        type:       row[2] || 'info_request',
+        title:      row[3] || '알림',
+        content:    row[4] || '',
+        status:     row[5] || 'pending',
+        created_at: row[6] || '',
+        rowIndex:   i + 2   // 1-based, row 1 = header
+      }))
+      .filter(n => n.id && n.status === 'pending');
+  } catch(e) { console.error('[Notif GET]', e.message); return []; }
 }
 
+async function updateNotifStatus(id, status) {
+  const tok = await getGCPToken();
+  if (!tok) return false;
+  try {
+    const r = await fetch(
+      `https://sheets.googleapis.com/v4/spreadsheets/${ARCHIVE_SS_ID}/values/${encodeURIComponent(NOTIF_SHEET)}`,
+      { headers: { Authorization: `Bearer ${tok}` } }
+    );
+    if (!r.ok) return false;
+    const rows = ((await r.json()).values) || [];
+    const rowIdx = rows.findIndex((row, i) => i > 0 && row[0] === id);
+    if (rowIdx < 0) return false;
+    // F 컬럼 (index 5) = status, 1-based row = rowIdx+1
+    await fetch(
+      `https://sheets.googleapis.com/v4/spreadsheets/${ARCHIVE_SS_ID}/values/${encodeURIComponent(`${NOTIF_SHEET}!F${rowIdx+1}`)}?valueInputOption=RAW`,
+      { method: 'PUT', headers: { Authorization: `Bearer ${tok}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ values: [[status]] }) }
+    );
+    return true;
+  } catch(e) { console.error('[Notif UPDATE]', e.message); return false; }
+}
+
+// ────────────────────────────────────────────────────────────
+// System Prompt Builders
+// ────────────────────────────────────────────────────────────
 const writeSSE  = (res, p) => res.write(`data: ${JSON.stringify(p)}\n\n`);
 const writeDone = (res)    => res.write('data: [DONE]\n\n');
 
@@ -134,7 +204,6 @@ async function fetchWithRetry(url, options, max = 3) {
 function pruneMessages(msgs) { const max = MAX_MSG_PAIRS*2; return msgs.length <= max ? msgs : [msgs[0], ...msgs.slice(-(max-1))]; }
 function emitChunked(res, text) { for (const c of (text.match(/[\s\S]{1,80}/g) || [text])) writeSSE(res, { text: c }); }
 
-// ★ 실제 MCP 도구 목록 섹션 빌드 — Gemini 할루시네이션 방지 핵심
 function buildMcpToolSection() {
   if (mcpTools.length === 0) return '';
   const byLayer = {
@@ -166,7 +235,6 @@ function buildClaudeSystem(freestyle, extra) {
 }
 function buildStringSystem(freestyle, extra) {
   if (freestyle) return '자유롭게 대화하는 AI 어시스턴트다. 어떤 주제든 제한 없이 답할 수 있다.';
-  // ★ 실제 MCP 도구 목록 포함 → Gemini/GPT 도구 할루시네이션 방지
   const base = ASTERION_BASE + buildMcpToolSection();
   return [base, knowledgeContext?`[지식베이스]\n${knowledgeContext}`:'', extra?.trim()?`[추가 시스템]\n${extra.trim()}`:''].filter(Boolean).join('\n\n');
 }
@@ -201,6 +269,9 @@ function normGPTInput(msgs, sys) {
   return out;
 }
 
+// ────────────────────────────────────────────────────────────
+// AI Runners
+// ────────────────────────────────────────────────────────────
 async function runClaude(apiMsgs, systemBlocks, res) {
   if (!CLAUDE_KEY) { writeSSE(res, { error:'ANTHROPIC_API_KEY 미설정' }); return; }
   const mcpSseUrl = MCP_SERVER_URL ? buildSSEUrl(MCP_SERVER_URL) : null;
@@ -231,11 +302,7 @@ async function runGemini(messages, systemPrompt, res) {
   const tools = mcpTools.length > 0 ? [{ functionDeclarations: mcpTools.map(t=>({ name:t.name, description:t.description, parameters:t.parameters })) }] : undefined;
   let contents = normGemini(messages), depth = 0;
   while (depth < MAX_TOOL_DEPTH) {
-    const bodyObj = {
-      systemInstruction: { parts:[{text:systemPrompt}] },
-      contents,
-      generationConfig:  { maxOutputTokens:65000, temperature:0.7, topP:0.95 },
-    };
+    const bodyObj = { systemInstruction:{ parts:[{text:systemPrompt}] }, contents, generationConfig:{ maxOutputTokens:65000, temperature:0.7, topP:0.95 } };
     if (tools) bodyObj.tools = tools;
     const response = await fetchWithRetry(url, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(bodyObj) });
     if (!response.ok) throw new Error(`Gemini ${response.status}: ${(await response.text()).slice(0,400)}`);
@@ -275,11 +342,14 @@ async function runGPT(inputMsgs, res) {
   const result = await response.json();
   for (const item of (result.output||[])) {
     if (item.type==='message') { for (const c of (item.content||[])) { if (c.type==='text'&&c.text) emitChunked(res, c.text); } }
-    if (item.type==='mcp_call')   writeSSE(res, { tool_call:  { name:item.name, input:item.arguments } });
+    if (item.type==='mcp_call')   writeSSE(res, { tool_call:{ name:item.name, input:item.arguments } });
     if (item.type==='mcp_result') writeSSE(res, { tool_result:{ name:item.name||'tool', ok:!item.error } });
   }
 }
 
+// ────────────────────────────────────────────────────────────
+// API Routes
+// ────────────────────────────────────────────────────────────
 app.post('/api/chat', async (req, res) => {
   const { model='claude', messages=[], system='', freestyle=false } = req.body;
   res.setHeader('Content-Type','text/event-stream');
@@ -303,19 +373,44 @@ app.get('/api/status', (_req, res) => res.json({
   mcp:       { connected:!!mcpClient, tools:mcpTools.length, url:MCP_SERVER_URL||'미설정', secretKey:MCP_SECRET_KEY?'✓':'미설정' },
   btrServer: { url:BTR_SERVER_URL||'미설정' },
 }));
-app.post('/api/reload-knowledge', async (_req, res) => { knowledgeContext=''; knowledgeStatus='loading...'; await loadDriveKnowledge(); res.json({ status:knowledgeStatus }); });
-app.post('/api/btr/start', async (req, res) => res.json(await callBTRServer('/btr/start', req.body)));
-app.get('/api/btr/status/:jobId', async (req, res) => {
-  if (!BTR_SERVER_URL) return res.json({ error:'BTR_SERVER_URL 미설정' });
-  try { const r = await fetch(`${BTR_SERVER_URL}/btr/status/${req.params.jobId}`); res.json(await r.json()); } catch (e) { res.status(500).json({ error:e.message }); }
-});
-app.post('/api/reconnect-mcp', async (_req, res) => { mcpClient=null; mcpTools=[]; await connectMCP(); res.json({ connected:!!mcpClient, tools:mcpTools.length }); });
 
+app.post('/api/reload-knowledge', async (_req, res) => {
+  knowledgeContext=''; knowledgeStatus='loading...';
+  await loadDriveKnowledge();
+  res.json({ status:knowledgeStatus });
+});
+
+app.post('/api/reconnect-mcp', async (_req, res) => {
+  mcpClient=null; mcpTools=[];
+  await connectMCP();
+  res.json({ connected:!!mcpClient, tools:mcpTools.length });
+});
+
+// ── BTR Notifications ──
+app.get('/api/notifications', async (_req, res) => {
+  res.json({ notifications: await getBTRNotifications() });
+});
+
+app.post('/api/notifications/:id/respond', async (req, res) => {
+  res.json({ success: await updateNotifStatus(req.params.id, 'responded') });
+});
+
+app.delete('/api/notifications/:id', async (req, res) => {
+  res.json({ success: await updateNotifStatus(req.params.id, 'dismissed') });
+});
+
+// (legacy BTR server proxy — 미사용이지만 유지)
+app.post('/api/btr/start', async (req, res) => {
+  if (!BTR_SERVER_URL) return res.json({ error:'BTR_SERVER_URL 미설정' });
+  try { const r = await fetch(`${BTR_SERVER_URL}/btr/start`, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(req.body) }); res.json(await r.json()); }
+  catch (e) { res.status(500).json({ error:e.message }); }
+});
+
+// ────────────────────────────────────────────────────────────
 app.listen(PORT, '0.0.0.0', () => {
-  console.log(`🔱 ASTERION Hub v3.2 — port ${PORT}`);
-  console.log(`   fix: 실제 MCP 도구 목록을 시스템 프롬프트에 주입 (Gemini 할루시네이션 방지)`);
-  console.log(`   Claude : ${CLAUDE_MODEL} | Extended Thinking | Native MCP ${CLAUDE_KEY?'✓':'✗'}`);
-  console.log(`   Gemini : ${GEMINI_MODEL} | Function Calling MCP ${GEMINI_KEY?'✓':'✗'}`);
-  console.log(`   GPT    : ${GPT_MODEL} | Responses API | Native MCP ${OPENAI_KEY?'✓':'✗'}`);
+  console.log(`🔱 ASTERION Hub v3.3 — port ${PORT}`);
+  console.log(`   + BTR Notifications API (Archive!BTRNotifications)`);
+  console.log(`   Claude : ${CLAUDE_MODEL} | Native MCP ${CLAUDE_KEY?'✓':'✗'}`);
+  console.log(`   Gemini : ${GEMINI_MODEL} | Function Calling ${GEMINI_KEY?'✓':'✗'}`);
   console.log(`   MCP    : ${MCP_SERVER_URL||'미설정'} | tools:${mcpTools.length}`);
 });
