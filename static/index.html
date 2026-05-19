@@ -19,12 +19,10 @@ body{height:100dvh;background:var(--bg);color:var(--tx);font-family:'Noto Sans K
 #topbar{height:52px;background:var(--bg1);border-bottom:1px solid var(--bdr);display:flex;align-items:center;justify-content:space-between;padding:0 14px;flex-shrink:0;gap:8px;}
 .logo{font-family:'Cinzel',serif;font-size:14px;letter-spacing:4px;color:var(--gold);white-space:nowrap}.logo span{font-size:9px;letter-spacing:2px;color:var(--tx3);display:block;margin-top:-2px}
 .mtog{display:flex;background:var(--bg2);border:1px solid var(--bdr);border-radius:20px;padding:3px;gap:2px;flex-shrink:0;}
-.mb{font-family:'Cinzel',serif;font-size:9px;letter-spacing:1px;padding:5px 10px;border-radius:16px;border:none;background:transparent;color:var(--tx3);cursor:pointer;transition:all .18s;white-space:nowrap;}
-.mb:hover{color:var(--tx2)}.mb.on-claude{background:var(--gold-a);color:var(--gold);border:1px solid rgba(201,169,110,.28)}.mb.on-gemini{background:rgba(74,172,170,.14);color:rgba(74,212,210,.9);border:1px solid rgba(74,172,170,.3)}
+.mb{font-family:'Cinzel',serif;font-size:9px;letter-spacing:1px;padding:5px 10px;border-radius:16px;border:none;background:transparent;color:var(--tx3);cursor:pointer;transition:all .18s;white-space:nowrap;}.mb:hover{color:var(--tx2)}.mb.on-claude{background:var(--gold-a);color:var(--gold);border:1px solid rgba(201,169,110,.28)}.mb.on-gemini{background:rgba(74,172,170,.14);color:rgba(74,212,210,.9);border:1px solid rgba(74,172,170,.3)}
 #btr-wrap{position:relative;flex-shrink:0}
 #btr-btn{background:var(--bg2);border:1px solid var(--bdr2);border-radius:16px;padding:5px 11px;font-size:11px;color:var(--tx3);cursor:pointer;font-family:'Cinzel',serif;letter-spacing:1px;transition:all .25s;white-space:nowrap;display:flex;align-items:center;gap:5px;}
-#btr-btn:hover{border-color:var(--btr-b);color:var(--btr-tx)}#btr-btn.active{background:var(--btr-c);color:var(--btr-tx);border-color:var(--btr-b)}
-#btr-btn.has-notif{border-color:var(--btr-b);color:var(--btr-tx);animation:btr-pulse 2s infinite;}
+#btr-btn:hover{border-color:var(--btr-b);color:var(--btr-tx)}#btr-btn.active{background:var(--btr-c);color:var(--btr-tx);border-color:var(--btr-b)}#btr-btn.has-notif{border-color:var(--btr-b);color:var(--btr-tx);animation:btr-pulse 2s infinite;}
 @keyframes btr-pulse{0%,100%{box-shadow:0 0 0 0 rgba(200,120,60,.4)}50%{box-shadow:0 0 0 5px rgba(200,120,60,0)}}
 #btr-badge{background:#c05020;color:#fff;border-radius:10px;padding:1px 5px;font-size:9px;font-family:'JetBrains Mono',monospace;min-width:16px;text-align:center;display:none;}
 #sse-dot{width:5px;height:5px;border-radius:50%;background:var(--tx3);flex-shrink:0;transition:background .5s;}#sse-dot.ok{background:#5a8a6a}#sse-dot.err{background:#9a5040}
@@ -38,16 +36,13 @@ body{height:100dvh;background:var(--bg);color:var(--tx);font-family:'Noto Sans K
 .nc-meta{display:flex;align-items:center;gap:6px;}.nc-type{background:var(--btr-c);color:var(--btr-tx);border-radius:10px;padding:2px 8px;font-size:9px;font-family:'Cinzel',serif;letter-spacing:1px;border:1px solid var(--btr-b);}
 .nc-session{font-size:10px;color:var(--tx3);font-family:'JetBrains Mono',monospace;}.nc-time{font-size:9px;color:var(--tx3);font-family:'JetBrains Mono',monospace;}
 .nc-dismiss{background:none;border:none;color:var(--tx3);font-size:15px;cursor:pointer;padding:2px 6px;border-radius:6px;transition:color .18s;line-height:1;}.nc-dismiss:hover{color:var(--red)}
-.nc-title{padding:8px 12px 4px;font-size:13px;color:var(--gold-lt);font-weight:500;}
-.nc-content{padding:4px 12px 10px;font-size:12px;color:var(--tx2);line-height:1.7;white-space:pre-wrap;max-height:120px;overflow-y:auto;}
+.nc-title{padding:8px 12px 4px;font-size:13px;color:var(--gold-lt);font-weight:500;}.nc-content{padding:4px 12px 10px;font-size:12px;color:var(--tx2);line-height:1.7;white-space:pre-wrap;max-height:120px;overflow-y:auto;}
 .nc-reply{padding:8px 12px 10px;border-top:1px solid var(--bdr2);display:flex;gap:8px;align-items:flex-end;}
 .nc-ta{flex:1;background:var(--bg3);border:1px solid var(--bdr);border-radius:8px;color:var(--tx);font-family:'Noto Sans KR',sans-serif;font-size:12px;line-height:1.6;padding:7px 10px;resize:none;height:60px;outline:none;transition:border-color .18s;}
 .nc-ta:focus{border-color:var(--gold)}.nc-ta::placeholder{color:var(--tx3)}
 .nc-send{background:var(--btr-c);border:1px solid var(--btr-b);color:var(--btr-tx);border-radius:8px;padding:7px 14px;font-size:11px;cursor:pointer;font-family:'Cinzel',serif;letter-spacing:1px;transition:all .18s;white-space:nowrap;flex-shrink:0;}.nc-send:hover{background:rgba(180,100,50,.32)}
 .nc-confirm{display:none;background:rgba(8,6,4,.92);border-top:1px solid var(--red);padding:12px;text-align:center;}.nc-confirm.show{display:block}.nc-confirm p{font-size:12px;color:var(--tx2);margin-bottom:10px;}
-.nc-confirm-btns{display:flex;gap:8px;justify-content:center;}
-.nc-yes{background:rgba(154,80,64,.25);border:1px solid rgba(154,80,64,.5);color:var(--red);padding:5px 16px;border-radius:8px;cursor:pointer;font-size:11px;font-family:'Cinzel',serif;letter-spacing:1px;}
-.nc-no{background:var(--bg3);border:1px solid var(--bdr);color:var(--tx3);padding:5px 16px;border-radius:8px;cursor:pointer;font-size:11px;font-family:'Cinzel',serif;letter-spacing:1px;}
+.nc-confirm-btns{display:flex;gap:8px;justify-content:center;}.nc-yes{background:rgba(154,80,64,.25);border:1px solid rgba(154,80,64,.5);color:var(--red);padding:5px 16px;border-radius:8px;cursor:pointer;font-size:11px;font-family:'Cinzel',serif;letter-spacing:1px;}.nc-no{background:var(--bg3);border:1px solid var(--bdr);color:var(--tx3);padding:5px 16px;border-radius:8px;cursor:pointer;font-size:11px;font-family:'Cinzel',serif;letter-spacing:1px;}
 #msgs{flex:1;overflow-y:auto;padding:16px 0 8px;-webkit-overflow-scrolling:touch}
 #empty{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100%;gap:12px;padding:40px 20px;}
 .e-star{font-family:'Cinzel',serif;font-size:26px;letter-spacing:6px;color:rgba(201,169,110,.18)}.e-name{font-family:'Cinzel',serif;font-size:9px;letter-spacing:4px;color:rgba(201,169,110,.13)}
@@ -59,10 +54,8 @@ body{height:100dvh;background:var(--bg);color:var(--tx);font-family:'Noto Sans K
 .mb2{flex:1;min-width:0}.meta{display:flex;gap:8px;align-items:center;margin-bottom:4px}.who{font-family:'Cinzel',serif;font-size:9px;letter-spacing:2px}
 .who.u{color:var(--tx3)}.who.claude{color:var(--gold)}.who.gemini{color:rgba(74,212,210,.9)}.ts{font-size:10px;color:var(--tx3);font-family:'JetBrains Mono',monospace}
 .cnt{color:var(--tx)}.cnt.u{color:var(--tx2)}.tool-pills{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:8px}
-.tpill{display:flex;align-items:center;gap:4px;background:var(--bg3);border:1px solid var(--bdr2);border-radius:10px;padding:3px 8px;font-size:10px;color:var(--tx3);font-family:'JetBrains Mono',monospace;transition:all .2s;}
-.tpill.done{border-color:rgba(90,138,106,.4);color:var(--green)}.tpill.err{border-color:rgba(154,80,64,.4);color:var(--red)}
-.tts-btn{display:inline-flex;align-items:center;gap:4px;margin-top:8px;background:var(--bg3);border:1px solid var(--bdr2);border-radius:14px;padding:4px 10px;font-size:10px;color:var(--tx3);cursor:pointer;font-family:'Cinzel',serif;letter-spacing:1px;transition:all .18s;user-select:none;}
-.tts-btn:hover{border-color:var(--bdr);color:var(--tx2)}.tts-btn.playing{background:var(--gold-a);border-color:rgba(201,169,110,.35);color:var(--gold)}
+.tpill{display:flex;align-items:center;gap:4px;background:var(--bg3);border:1px solid var(--bdr2);border-radius:10px;padding:3px 8px;font-size:10px;color:var(--tx3);font-family:'JetBrains Mono',monospace;transition:all .2s;}.tpill.done{border-color:rgba(90,138,106,.4);color:var(--green)}.tpill.err{border-color:rgba(154,80,64,.4);color:var(--red)}
+.tts-btn{display:inline-flex;align-items:center;gap:4px;margin-top:8px;background:var(--bg3);border:1px solid var(--bdr2);border-radius:14px;padding:4px 10px;font-size:10px;color:var(--tx3);cursor:pointer;font-family:'Cinzel',serif;letter-spacing:1px;transition:all .18s;user-select:none;}.tts-btn:hover{border-color:var(--bdr);color:var(--tx2)}.tts-btn.playing{background:var(--gold-a);border-color:rgba(201,169,110,.35);color:var(--gold)}
 .cnt h1,.cnt h2,.cnt h3{font-family:'Cinzel',serif;color:var(--gold);margin:14px 0 6px;letter-spacing:1px}.cnt h1{font-size:16px}.cnt h2{font-size:14px;border-bottom:1px solid var(--bdr2);padding-bottom:4px}.cnt h3{font-size:13px}
 .cnt p{margin:7px 0}.cnt strong{color:var(--gold-lt);font-weight:600}.cnt em{color:var(--tx2)}
 .cnt code{font-family:'JetBrains Mono',monospace;font-size:12px;background:var(--bg2);border:1px solid var(--bdr2);padding:1px 5px;border-radius:3px;color:var(--gold-lt);}
@@ -71,8 +64,7 @@ body{height:100dvh;background:var(--bg);color:var(--tx);font-family:'Noto Sans K
 .cnt blockquote{border-left:2px solid var(--gold);padding:6px 12px;margin:10px 0;background:var(--gold-b);border-radius:0 5px 5px 0;color:var(--tx2);}
 .cnt table{width:100%;border-collapse:collapse;margin:10px 0;font-size:13px}.cnt th{background:var(--gold-a);border:1px solid var(--bdr);padding:6px 10px;color:var(--gold);font-family:'Cinzel',serif;font-size:9px;letter-spacing:1px}.cnt td{border:1px solid var(--bdr2);padding:6px 10px;color:var(--tx2)}
 .cnt a{color:var(--gold);text-decoration:none;border-bottom:1px solid var(--bdr)}.cnt hr{border:none;border-top:1px solid var(--bdr);margin:14px 0}
-.cpbtn{position:absolute;top:7px;right:7px;background:var(--bg2);border:1px solid var(--bdr);color:var(--tx3);font-size:9px;padding:3px 8px;border-radius:3px;cursor:pointer;font-family:'JetBrains Mono',monospace;transition:color .18s;display:none;}
-pre:hover .cpbtn{display:block}.cpbtn:hover{color:var(--gold)}
+.cpbtn{position:absolute;top:7px;right:7px;background:var(--bg2);border:1px solid var(--bdr);color:var(--tx3);font-size:9px;padding:3px 8px;border-radius:3px;cursor:pointer;font-family:'JetBrains Mono',monospace;transition:color .18s;display:none;}pre:hover .cpbtn{display:block}.cpbtn:hover{color:var(--gold)}
 .cur::after{content:'▋';color:var(--gold);animation:bl .6s infinite;margin-left:1px}@keyframes bl{0%,100%{opacity:1}50%{opacity:0}}
 .thinking{display:flex;gap:5px;align-items:center;padding:4px 0}.thinking span{width:5px;height:5px;border-radius:50%;background:var(--gold);opacity:.25;animation:th .8s infinite;}.thinking span:nth-child(2){animation-delay:.15s}.thinking span:nth-child(3){animation-delay:.3s}@keyframes th{0%,100%{opacity:.2}50%{opacity:.8}}
 #sys-panel{background:var(--bg1);padding:0 14px;max-height:0;overflow:hidden;transition:max-height .25s ease,padding .25s ease;flex-shrink:0;}#sys-panel.open{max-height:120px;padding:10px 14px;border-top:1px solid var(--bdr2)}
@@ -105,7 +97,7 @@ select{background:var(--bg2);border:1px solid var(--bdr);color:var(--tx2);border
 <div id="topbar">
   <div class="logo">ASTERION<span>HUB</span></div>
   <div class="mtog"><button class="mb" id="b-claude" onclick="setModel('claude')">CLAUDE</button><button class="mb" id="b-gemini" onclick="setModel('gemini')">GEMINI</button></div>
-  <div id="btr-wrap"><button id="btr-btn" onclick="toggleBtr()" title="BTR 파이프라인 알림"><span id="sse-dot"></span>🔔 BTR<span id="btr-badge"></span></button></div>
+  <div id="btr-wrap"><button id="btr-btn" onclick="toggleBtr()"><span id="sse-dot"></span>🔔 BTR<span id="btr-badge"></span></button></div>
 </div>
 <div id="btr-panel">
   <div id="btr-panel-hdr"><span class="btr-title">🔔 BTR 파이프라인 알림</span><button id="btr-close" onclick="toggleBtr()">CLOSE ✕</button></div>
@@ -127,7 +119,7 @@ select{background:var(--bg2);border:1px solid var(--bdr);color:var(--tx2);border
 <div id="settings-panel">
   <div class="sp-section">
     <div class="sp-title">🎙 Supertonic 3 TTS <span class="sp-badge" id="st-badge">미설치</span></div>
-    <div class="sp-info" id="st-status-msg">7개 파일을 업로드하면 고품질 한국어 TTS가 활성화됩니다. 설치 후에는 재업로드 불필요 (IndexedDB 저장).</div>
+    <div class="sp-info" id="st-status-msg">7개 파일을 업로드하면 고품질 한국어 TTS가 활성화됩니다.</div>
     <div class="tts-file-grid" id="tts-file-grid">
       <div class="tts-file-item" id="fi-duration_predictor"><span>duration_predictor</span></div>
       <div class="tts-file-item" id="fi-text_encoder"><span>text_encoder</span></div>
@@ -145,7 +137,7 @@ select{background:var(--bg2);border:1px solid var(--bdr);color:var(--tx2);border
     <div class="sp-row"><span class="sp-label">품질(스텝)</span><input type="range" id="st-steps" min="2" max="10" step="1" value="5" oninput="updateStepsVal()"/><span class="sp-val" id="st-steps-val">5</span></div>
     <div class="sp-row"><span class="sp-label">속도</span><input type="range" id="tts-speed" min="0.5" max="2.0" step="0.1" value="1.0" oninput="updateSpeedVal()"/><span class="sp-val" id="tts-speed-val">1.0x</span></div>
     <div class="sp-row" style="gap:8px"><button class="sp-btn" id="st-test-btn" onclick="testTts()">▶ 테스트 재생</button><button class="sp-btn danger" onclick="clearTtsModel()">🗑 초기화</button></div>
-    <div class="sp-info" style="margin-top:6px">다운로드: <a href="https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/sherpa-onnx-supertonic-3-tts-int8-2026-05-11.tar.bz2" target="_blank">sherpa-onnx-supertonic-3-int8</a> (ZArchiver로 압축 해제)</div>
+    <div class="sp-info" style="margin-top:6px">다운로드: <a href="https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/sherpa-onnx-supertonic-3-tts-int8-2026-05-11.tar.bz2" target="_blank">sherpa-onnx-supertonic-3-int8</a></div>
   </div>
   <div class="sp-section">
     <div class="sp-title">🔊 Web Speech (폴백)</div>
@@ -180,10 +172,17 @@ const STP={steps:5,speed:1.0,sid:0};
 let pendingNotifs=[],btrOpen=false,sseConn=null;
 const MODEL_STYLE={claude:{avClass:'a-claude',whoClass:'claude',label:'CLAUDE',icon:'✦'},gemini:{avClass:'a-gemini',whoClass:'gemini',label:'GEMINI',icon:'◈'}};
 
-// ══════════ SUPERTONIC ENGINE ══════════
+// ══ SUPERTONIC ENGINE v4.2.3 ══
+// tts.json 분석 완료:
+//   sample_rate: 44100 (ae.sample_rate)
+//   style_ttl: [1, 50, 256] (ttl.style_encoder.style_token_layer)
+//   style_dp:  [1, 8,  16]  (dp.style_encoder.style_token_layer)
+//   latent_channels: 24 * 6 = 144 (ttl.latent_dim * ttl.chunk_compress_factor)
+//   T = ceil(dur * 44100 / 512 / 6) (ae.base_chunk_size=512, ttl.chunk_compress_factor=6)
+
 const TTS_DB_NAME='asterion-tts-v1',TTS_STORE='model-files';
 const REQUIRED=['duration_predictor.int8.onnx','text_encoder.int8.onnx','vector_estimator.int8.onnx','vocoder.int8.onnx','tts.json','unicode_indexer.bin','voice.bin'];
-let ttsDb=null,stReady=false,stLoading=false,stSess={},stConfig=null,uniMap=null,voiceData=null,stSR=24000;
+let ttsDb=null,stReady=false,stLoading=false,stSess={},stConfig=null,uniMap=null,voiceData=null;
 
 async function openTtsDb(){if(ttsDb)return ttsDb;return new Promise((res,rej)=>{const r=indexedDB.open(TTS_DB_NAME,1);r.onupgradeneeded=e=>e.target.result.createObjectStore(TTS_STORE);r.onsuccess=e=>{ttsDb=e.target.result;res(ttsDb);};r.onerror=rej;});}
 async function saveTtsFile(n,b){const db=await openTtsDb();return new Promise((res,rej)=>{const tx=db.transaction(TTS_STORE,'readwrite');tx.objectStore(TTS_STORE).put(b,n);tx.oncomplete=()=>res(true);tx.onerror=rej;});}
@@ -192,7 +191,7 @@ async function deleteTtsFile(n){const db=await openTtsDb();return new Promise(re
 
 async function handleTtsUpload(files){
   if(!files||!files.length)return;setStBadge('loading','저장 중...');let saved=0;
-  for(const f of Array.from(files)){const c=f.name.split('/').pop().split('\\').pop();const b=await f.arrayBuffer();await saveTtsFile(c,b);saved++;console.log('[TTS] 저장:'+c+' '+(b.byteLength/1024/1024).toFixed(1)+'MB');}
+  for(const f of Array.from(files)){const c=f.name.split('/').pop().split('\\').pop();const b=await f.arrayBuffer();await saveTtsFile(c,b);saved++;console.log('[TTS] 저장:'+c+' '+(b.byteLength/1024/1024).toFixed(2)+'MB');}
   toast(saved+'개 파일 저장 완료');await refreshFileGrid();await tryInitSupertonic();
 }
 
@@ -224,37 +223,55 @@ async function initSupertonic(){
     ort.env.wasm.wasmPaths=window.__ORT_CDN;ort.env.wasm.numThreads=2;
     const files={};for(const n of REQUIRED){const b=await loadTtsFile(n);if(!b)throw new Error('누락: '+n);files[n]=b;}
     stConfig=parseTtsJson(new TextDecoder().decode(files['tts.json']));
-    stSR=stConfig.sample_rate||24000;
     uniMap=parseUnicodeIndexer(files['unicode_indexer.bin']);
-    console.log('[TTS] uniMap:'+uniMap.size);
+    console.log('[TTS] uniMap:'+uniMap.size+', SR:'+stConfig.sample_rate+', latentCh:'+stConfig.latent_channels);
     voiceData=parseVoiceBin(files['voice.bin'],stConfig);
-    console.log('[TTS] speakers:'+voiceData.length);
+    console.log('[TTS] speakers:'+voiceData.length+', style_ttl:[1,'+stConfig.n_style_ttl+','+stConfig.style_dim_ttl+'], style_dp:[1,'+stConfig.n_style_dp+','+stConfig.style_dim_dp+']');
     showTtsProgress('ONNX 세션 로딩 (20초~)...');
     stSess.durPred =await ort.InferenceSession.create(files['duration_predictor.int8.onnx'],{executionProviders:['wasm']});
     stSess.textEnc =await ort.InferenceSession.create(files['text_encoder.int8.onnx'],{executionProviders:['wasm']});
     stSess.vecEst  =await ort.InferenceSession.create(files['vector_estimator.int8.onnx'],{executionProviders:['wasm']});
     stSess.vocoder =await ort.InferenceSession.create(files['vocoder.int8.onnx'],{executionProviders:['wasm']});
     stReady=true;setStBadge('ready','준비됨 ✓');
-    document.getElementById('st-status-msg').textContent='Supertonic 3 준비 완료. 화자 '+voiceData.length+'명, '+stSR+'Hz';
+    document.getElementById('st-status-msg').textContent='Supertonic 3 준비 완료. 화자 '+voiceData.length+'명, '+stConfig.sample_rate+'Hz';
     toast('Supertonic TTS 준비 완료!');
   }catch(e){stReady=false;setStBadge('error','오류');document.getElementById('st-status-msg').textContent='오류: '+e.message;console.error('[TTS]',e);}
   hideTtsProgress();stLoading=false;
 }
 
+// ★ FIX v4.2.3: tts.json을 올바르게 파싱
+// TTL과 DP의 style dims가 완전히 다름:
+//   TTL: n_style=50, style_value_dim=256
+//   DP:  n_style=8,  style_value_dim=16
 function parseTtsJson(text){
-  try{
-    const j=JSON.parse(text);
-    console.log('[TTS] tts.json keys:',Object.keys(j).join(', '));
-    return{
-      sample_rate:           j.sample_rate          ||j.sampleRate          ||24000,
-      num_speakers:          j.num_speakers          ||j.numSpeakers          ||10,
-      latent_dim:            j.latent_dim            ||j.latentDim            ||8,
-      chunk_compress_factor: j.chunk_compress_factor ||j.chunkCompressFactor  ||4,
-      base_chunk_size:       j.base_chunk_size       ||j.baseChunkSize        ||512,
-      _raw:j,
-      // ★ style dims는 parseTtsJson에서 사용하지 않음 — parseVoiceBin이 voice.bin 크기로 직접 계산
-    };
-  }catch{return{sample_rate:24000,num_speakers:10,latent_dim:8,chunk_compress_factor:4,base_chunk_size:512};}
+  const j=JSON.parse(text);
+  const ae=j.ae||{};
+  const ttl=j.ttl||{};
+  const dp=j.dp||{};
+  const ttlSTL=ttl.style_encoder?.style_token_layer||{};
+  const dpSTL =dp.style_encoder?.style_token_layer||{};
+  const cfg={
+    // Audio Engine
+    sample_rate:    ae.sample_rate      ||44100,
+    base_chunk_size:ae.base_chunk_size  ||512,
+    // TTL params
+    latent_dim:     ttl.latent_dim      ||24,
+    chunk_compress_factor: ttl.chunk_compress_factor||6,
+    // style_ttl — TTL 컴포넌트
+    n_style_ttl:    ttlSTL.n_style      ||50,
+    style_dim_ttl:  ttlSTL.style_value_dim||256,
+    // style_dp — Duration Predictor 컴포넌트
+    n_style_dp:     dpSTL.n_style       ||8,
+    style_dim_dp:   dpSTL.style_value_dim||16,
+  };
+  // 유도 파라미터
+  cfg.latent_channels = cfg.latent_dim * cfg.chunk_compress_factor; // 24*6=144
+  cfg.hop_samples     = cfg.base_chunk_size * cfg.chunk_compress_factor; // 512*6=3072
+  console.log('[TTS] parseTtsJson:',JSON.stringify({
+    sr:cfg.sample_rate, latCh:cfg.latent_channels, hop:cfg.hop_samples,
+    ttl:[cfg.n_style_ttl,cfg.style_dim_ttl], dp:[cfg.n_style_dp,cfg.style_dim_dp]
+  }));
+  return cfg;
 }
 
 function parseUnicodeIndexer(buf){
@@ -265,29 +282,25 @@ function parseUnicodeIndexer(buf){
   return map;
 }
 
-// ★ FIX v4.2.2: tts.json 값 완전 무시, voice.bin 파일크기만으로 계산
-// 에러 확정: n_style=8 (Expected:8), style_dim=16 (Expected:16)
-// 검증: perSpkF = voice.bin 전체 / numSpk = 256, d = 256/16 = 16 ✓
+// ★ FIX v4.2.3: voice.bin — TTL과 DP를 각자의 실제 dims로 파싱
+// Per speaker: style_ttl(50×256=12800 floats) + style_dp(8×16=128 floats) = 12928 floats
+// File size: 4 + 10*12928*4 = 517124 bytes ≈ 505KB
 function parseVoiceBin(buf,cfg){
   const view=new DataView(buf);let offset=0;
   const numSpk=view.getInt32(offset,true);offset+=4;
-  // voice.bin 파일 크기가 유일한 ground truth (tts.json은 잘못된 값 포함 가능)
-  const totalF=(buf.byteLength-4)/4;
-  const perSpkF=totalF/numSpk;
-  const nTtl=8,nDp=8;              // n=8 고정 (ONNX 에러에서 Expected:8 확인)
-  const d=Math.round(perSpkF/(nTtl+nDp)); // d = perSpkF/16
-  const dTtl=d,dDp=d;
-  const ttlLen=nTtl*dTtl,dpLen=nDp*dDp;
+  const nTtl=cfg.n_style_ttl, dTtl=cfg.style_dim_ttl;  // 50, 256
+  const nDp =cfg.n_style_dp,  dDp =cfg.style_dim_dp;   // 8, 16
+  const ttlLen=nTtl*dTtl, dpLen=nDp*dDp;               // 12800, 128
   console.log('[TTS voice.bin] numSpk='+numSpk+', fileSize='+buf.byteLength+
-              ', perSpkF='+perSpkF.toFixed(0)+', d='+d+
-              ', ttl=[1,'+nTtl+','+dTtl+'], dp=[1,'+nDp+','+dDp+']');
+              ', ttlLen='+ttlLen+', dpLen='+dpLen+
+              ', expectedPerSpkBytes='+(ttlLen+dpLen)*4);
   const speakers=[];
   for(let s=0;s<numSpk&&offset+(ttlLen+dpLen)*4<=buf.byteLength;s++){
     const st=new Float32Array(buf,offset,ttlLen);offset+=ttlLen*4;
     const sd=new Float32Array(buf,offset,dpLen); offset+=dpLen*4;
     speakers.push({style_ttl:Float32Array.from(st),style_dp:Float32Array.from(sd),dims_ttl:[1,nTtl,dTtl],dims_dp:[1,nDp,dDp]});
   }
-  if(speakers.length===0)console.error('[TTS] voice.bin 파싱 실패 — expected per-spk bytes:',(ttlLen+dpLen)*4,'actual perSpkF:',perSpkF.toFixed(0));
+  if(speakers.length===0)console.error('[TTS] voice.bin 파싱 실패 — offset:',offset,'buf:',buf.byteLength);
   return speakers;
 }
 
@@ -298,20 +311,27 @@ function textToIds(text){
   return ids;
 }
 
+// ★ FIX v4.2.3: 올바른 latent 계산
+// latent_channels=144, sample_rate=44100, T=ceil(dur*44100/3072)
 async function synthSupertonic(text,sid,steps,speed){
   if(!stReady)throw new Error('엔진 미준비');
   const ids=textToIds(text),seqLen=ids.length;if(!seqLen)throw new Error('입력 없음');
   const spk=voiceData[Math.min(sid,voiceData.length-1)];
   const tokT=new ort.Tensor('int64',BigInt64Array.from(ids.map(BigInt)),[1,seqLen]);
   const maskT=new ort.Tensor('float32',new Float32Array(seqLen).fill(1.0),[1,1,seqLen]);
-  const sTtl=new ort.Tensor('float32',spk.style_ttl,spk.dims_ttl);
-  const sDp =new ort.Tensor('float32',spk.style_dp, spk.dims_dp);
+  const sTtl=new ort.Tensor('float32',spk.style_ttl,spk.dims_ttl);  // [1,50,256]
+  const sDp =new ort.Tensor('float32',spk.style_dp, spk.dims_dp);   // [1,8,16]
   showTtsProgress('1/4 Duration...');
   const durOut=await stSess.durPred.run({text_ids:tokT,style_dp:sDp,text_mask:maskT});
-  const adjDur=(Array.from(durOut.duration?.data||[1.0])[0])/(speed||1.0);
-  const bcs=stConfig.base_chunk_size||512,ccf=stConfig.chunk_compress_factor||4;
-  const T=Math.max(1,Math.ceil(adjDur*stSR/(bcs*ccf)));
-  const lCh=(stConfig.latent_dim||8)*ccf;
+  const durSecs=Array.from(durOut.duration?.data||[1.0])[0];
+  const adjDur=durSecs/(speed||1.0);
+  // T = ceil(duration_sec * sample_rate / (base_chunk_size * chunk_compress_factor))
+  //   = ceil(dur * 44100 / (512 * 6)) = ceil(dur * 44100 / 3072)
+  const hop=stConfig.hop_samples;   // 3072
+  const lCh=stConfig.latent_channels; // 144
+  const sr =stConfig.sample_rate;    // 44100
+  const T  =Math.max(1,Math.ceil(adjDur*sr/hop));
+  console.log('[TTS] dur='+durSecs.toFixed(2)+'s, T='+T+', lCh='+lCh+', hop='+hop);
   showTtsProgress('2/4 Encoding...');
   const encOut=await stSess.textEnc.run({text_ids:tokT,style_ttl:sTtl,text_mask:maskT});
   const textEmb=encOut.text_emb;
@@ -327,14 +347,14 @@ async function synthSupertonic(text,sid,steps,speed){
   showTtsProgress('4/4 Vocoder...');
   const vocOut=await stSess.vocoder.run({[stSess.vocoder.inputNames[0]]:z});
   hideTtsProgress();
-  return{samples:Float32Array.from(vocOut[stSess.vocoder.outputNames[0]].data),sampleRate:stSR};
+  return{samples:Float32Array.from(vocOut[stSess.vocoder.outputNames[0]].data),sampleRate:sr};
 }
 
 function gaussianNoise(size){const a=new Float32Array(size);for(let i=0;i<size;i+=2){const u1=Math.random()||1e-10,u2=Math.random(),r=Math.sqrt(-2*Math.log(u1)),th=2*Math.PI*u2;a[i]=r*Math.cos(th);if(i+1<size)a[i+1]=r*Math.sin(th);}return a;}
 
 function float32ToWav(s,sr){const l=s.length,b=new ArrayBuffer(44+l*2),v=new DataView(b),w4=(o,x)=>v.setUint32(o,x,true),w2=(o,x)=>v.setUint16(o,x,true);[82,73,70,70].forEach((x,i)=>v.setUint8(i,x));w4(4,36+l*2);[87,65,86,69].forEach((x,i)=>v.setUint8(8+i,x));[102,109,116,32].forEach((x,i)=>v.setUint8(12+i,x));w4(16,16);w2(20,1);w2(22,1);w4(24,sr);w4(28,sr*2);w2(32,2);w2(34,16);[100,97,116,97].forEach((x,i)=>v.setUint8(36+i,x));w4(40,l*2);for(let i=0;i<l;i++){const x=Math.max(-1,Math.min(1,s[i]));v.setInt16(44+i*2,x<0?x*32768:x*32767,true);}return b;}
 
-async function playWavBuffer(wb){const ctx=new AudioContext(),ab=await ctx.decodeAudioData(wb),src=ctx.createBufferSource();src.buffer=ab;src.connect(ctx.destination);src.start();return new Promise(res=>{src.onended=()=>{ctx.close();res();};});}
+async function playWavBuffer(wb){const ctx=new AudioContext(),ab=await ctx.decodeAudioData(wb.slice(0)),src=ctx.createBufferSource();src.buffer=ab;src.connect(ctx.destination);src.start();return new Promise(res=>{src.onended=()=>{ctx.close();res();};});}
 
 async function speakText(text,btnEl){
   const synth=window.speechSynthesis;
@@ -366,7 +386,7 @@ async function testTts(){
   if(stReady){
     btn.textContent='⏸ 정지';btn.classList.add('playing');WS.activeBtn=btn;
     try{const{samples,sampleRate}=await synthSupertonic(TEST_TEXT,STP.sid,STP.steps,STP.speed);await playWavBuffer(float32ToWav(samples,sampleRate));}
-    catch(e){toast('Supertonic 오류: '+e.message);}
+    catch(e){toast('Supertonic 오류: '+e.message);console.error('[TTS]',e);}
     btn.textContent='▶ 테스트 재생';btn.classList.remove('playing');WS.activeBtn=null;
   }else{toast('모델 미설치 — Web Speech로 재생');testWsSpeech();}
 }
@@ -389,7 +409,7 @@ function setStBadge(cls,text){const el=document.getElementById('st-badge');el.cl
 function showTtsProgress(msg){const el=document.getElementById('tts-progress');el.textContent=msg;el.classList.add('show');}
 function hideTtsProgress(){document.getElementById('tts-progress').classList.remove('show');}
 
-// ══════════ INIT ══════════
+// ══ INIT ══
 async function init(){
   try{const d=JSON.parse(localStorage.getItem('ah-v42')||'{}');S.model=d.model||'claude';S.freestyle=d.freestyle||false;WS.rate=d.wsRate||1.0;WS.pitch=d.wsPitch||1.0;STP.sid=d.stSid||0;STP.steps=d.stSteps||5;STP.speed=d.stSpeed||1.0;}catch(_){}
   setModel(S.model,false);if(S.freestyle)applyFreestyle(false);
@@ -402,7 +422,7 @@ async function init(){
 }
 function save(){localStorage.setItem('ah-v42',JSON.stringify({model:S.model,freestyle:S.freestyle,wsRate:WS.rate,wsPitch:WS.pitch,stSid:STP.sid,stSteps:STP.steps,stSpeed:STP.speed}));}
 
-// ══════════ SSE ══════════
+// ══ SSE ══
 function connectNotifSSE(){
   if(sseConn){sseConn.close();sseConn=null;}
   const es=new EventSource('/api/notifications/stream');sseConn=es;
@@ -411,7 +431,7 @@ function connectNotifSSE(){
   es.onerror=()=>{document.getElementById('sse-dot').className='err';};
 }
 
-// ══════════ STATUS ══════════
+// ══ STATUS ══
 async function checkStatus(){
   try{const d=await(await fetch('/api/status')).json();const s=d.drive?.status||'';
     if(s.startsWith('loaded'))setKB('KB '+(d.drive?.chars>0?'연결됨':'0'),'#5a8a6a');
@@ -431,8 +451,7 @@ function toggleBtr(){btrOpen=!btrOpen;document.getElementById('btr-panel').class
 function getTypeLabel(t){return{info_request:'정보 요청',phase_confirm:'Phase 확정',report_complete:'보고서 완료',rubric_held:'루브릭 보류',sclass_reached:'S-Class 달성'}[t]||t;}
 function renderBtrCards(){
   const c=document.getElementById('btr-cards'),e=document.getElementById('btr-empty');
-  if(!pendingNotifs.length){c.innerHTML='';e.style.display='block';return;}
-  e.style.display='none';
+  if(!pendingNotifs.length){c.innerHTML='';e.style.display='block';return;}e.style.display='none';
   c.innerHTML=pendingNotifs.map(n=>`<div class="nc" id="nc-${esc(n.id)}"><div class="nc-hdr"><div class="nc-meta"><span class="nc-type">${getTypeLabel(n.type)}</span><span class="nc-session">${esc(n.session_id)}</span></div><div class="nc-meta" style="gap:8px"><span class="nc-time">${n.created_at?new Date(n.created_at).toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'}):''}</span><button class="nc-dismiss" onclick="askDismiss('${esc(n.id)}')">✕</button></div></div><div class="nc-title">${esc(n.title)}</div><div class="nc-content">${esc(n.content)}</div><div class="nc-reply"><textarea class="nc-ta" id="nc-ta-${esc(n.id)}" placeholder="Gemini에게 응답을 입력하세요..."></textarea><button class="nc-send" onclick="replyToNotif('${esc(n.id)}','${esc(n.title)}','${esc(n.content)}')">전송 →</button></div><div class="nc-confirm" id="nc-confirm-${esc(n.id)}"><p>이 알림을 삭제하면 해당 BTR 루브릭이 종료됩니다.<br>계속하시겠습니까?</p><div class="nc-confirm-btns"><button class="nc-yes" onclick="confirmDismiss('${esc(n.id)}')">삭제</button><button class="nc-no" onclick="cancelDismiss('${esc(n.id)}')">취소</button></div></div></div>`).join('');
 }
 function askDismiss(id){document.getElementById('nc-confirm-'+id)?.classList.add('show');}
