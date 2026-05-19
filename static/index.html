@@ -86,7 +86,7 @@ select{background:var(--bg2);border:1px solid var(--bdr);color:var(--tx2);border
 #send{width:34px;height:34px;background:var(--gold-a);border:1px solid rgba(201,169,110,.28);color:var(--gold);border-radius:8px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;transition:all .18s;}#send:hover:not(:disabled){background:rgba(201,169,110,.24)}#send:disabled{opacity:.35;cursor:default}
 .hint-row{display:flex;justify-content:space-between;padding:4px 2px 0;font-size:10px;color:var(--tx3);font-family:'JetBrains Mono',monospace;}
 #toast{position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:var(--bg3);border:1px solid var(--bdr);border-radius:20px;padding:8px 18px;font-size:12px;color:var(--tx2);opacity:0;pointer-events:none;transition:opacity .25s;z-index:99;white-space:nowrap;max-width:90vw;overflow:hidden;text-overflow:ellipsis;}#toast.on{opacity:1}
-#tts-progress{position:fixed;bottom:70px;left:50%;transform:translateX(-50%));background:var(--bg3);border:1px solid var(--gold);border-radius:20px;padding:6px 16px;font-size:11px;color:var(--gold);opacity:0;pointer-events:none;transition:opacity .25s;z-index:100;font-family:'Cinzel',serif;letter-spacing:1px;display:none;}#tts-progress.show{opacity:1;display:block}
+#tts-progress{position:fixed;bottom:70px;left:50%;transform:translateX(-50%);background:var(--bg3);border:1px solid var(--gold);border-radius:20px;padding:6px 16px;font-size:11px;color:var(--gold);opacity:0;pointer-events:none;transition:opacity .25s;z-index:100;font-family:'Cinzel',serif;letter-spacing:1px;display:none;}#tts-progress.show{opacity:1;display:block}
 </style>
 </head>
 <body>
@@ -116,7 +116,6 @@ select{background:var(--bg2);border:1px solid var(--bdr);color:var(--tx2);border
   <div class="sp-section">
     <div class="sp-title">🎙 Supertonic 3 TTS <span class="sp-badge" id="st-badge">미설치</span></div>
     <div class="sp-info" id="st-status-msg">7개 파일을 업로드하면 고품질 한국어 TTS가 활성화됩니다.</div>
-    <!-- 모델 입력 이름 디버그 표시 -->
     <div class="sp-mono" id="st-model-names" style="display:none"></div>
     <div class="tts-file-grid" id="tts-file-grid">
       <div class="tts-file-item" id="fi-duration_predictor"><span>duration_predictor</span></div>
@@ -169,7 +168,7 @@ const STP={steps:5,speed:1.0,sid:0};
 let pendingNotifs=[],btrOpen=false,sseConn=null;
 const MODEL_STYLE={claude:{avClass:'a-claude',whoClass:'claude',label:'CLAUDE',icon:'✦'},gemini:{avClass:'a-gemini',whoClass:'gemini',label:'GEMINI',icon:'◈'}};
 
-// ══ SUPERTONIC ENGINE v4.2.4 ══
+// ══ SUPERTONIC ENGINE v4.2.5 ══
 const TTS_DB_NAME='asterion-tts-v1',TTS_STORE='model-files';
 const REQUIRED=['duration_predictor.int8.onnx','text_encoder.int8.onnx','vector_estimator.int8.onnx','vocoder.int8.onnx','tts.json','unicode_indexer.bin','voice.bin'];
 let ttsDb=null,stReady=false,stLoading=false,stSess={},stConfig=null,uniMap=null,voiceData=null;
@@ -221,24 +220,19 @@ async function initSupertonic(){
     stSess.textEnc =await ort.InferenceSession.create(files['text_encoder.int8.onnx'],{executionProviders:['wasm']});
     stSess.vecEst  =await ort.InferenceSession.create(files['vector_estimator.int8.onnx'],{executionProviders:['wasm']});
     stSess.vocoder =await ort.InferenceSession.create(files['vocoder.int8.onnx'],{executionProviders:['wasm']});
-
-    // ★ 실제 ONNX 입력/출력 이름 로그 (디버깅용)
     const names={
       durPred:{in:[...stSess.durPred.inputNames],out:[...stSess.durPred.outputNames]},
       textEnc:{in:[...stSess.textEnc.inputNames],out:[...stSess.textEnc.outputNames]},
       vecEst: {in:[...stSess.vecEst.inputNames], out:[...stSess.vecEst.outputNames]},
       vocoder:{in:[...stSess.vocoder.inputNames],out:[...stSess.vocoder.outputNames]},
     };
-    console.log('[TTS] 모델 입출력 이름:', JSON.stringify(names,null,2));
-
-    // 설정 패널에 표시
+    console.log('[TTS] 모델 입출력 이름:',JSON.stringify(names,null,2));
     const nmEl=document.getElementById('st-model-names');
     nmEl.style.display='block';
     nmEl.textContent='durPred in:'+names.durPred.in.join(',')+' out:'+names.durPred.out.join(',')+'\n'+
                      'textEnc  in:'+names.textEnc.in.join(',')+' out:'+names.textEnc.out.join(',')+'\n'+
                      'vecEst   in:'+names.vecEst.in.join(',')+' out:'+names.vecEst.out.join(',')+'\n'+
                      'vocoder  in:'+names.vocoder.in.join(',')+' out:'+names.vocoder.out.join(',');
-
     stReady=true;setStBadge('ready','준비됨 ✓');
     document.getElementById('st-status-msg').textContent='Supertonic 3 준비 완료. 화자 '+voiceData.length+'명, '+stConfig.sample_rate+'Hz';
     toast('Supertonic TTS 준비 완료!');
@@ -246,7 +240,6 @@ async function initSupertonic(){
   hideTtsProgress();stLoading=false;
 }
 
-// tts.json 파싱 (v4.2.3 기준 완전판)
 function parseTtsJson(text){
   const j=JSON.parse(text),ae=j.ae||{},ttl=j.ttl||{},dp=j.dp||{};
   const ttlSTL=ttl.style_encoder?.style_token_layer||{};
@@ -261,8 +254,8 @@ function parseTtsJson(text){
     n_style_dp:     dpSTL.n_style||8,
     style_dim_dp:   dpSTL.style_value_dim||16,
   };
-  cfg.latent_channels=cfg.latent_dim*cfg.chunk_compress_factor; // 144
-  cfg.hop_samples    =cfg.base_chunk_size*cfg.chunk_compress_factor; // 3072
+  cfg.latent_channels=cfg.latent_dim*cfg.chunk_compress_factor;
+  cfg.hop_samples    =cfg.base_chunk_size*cfg.chunk_compress_factor;
   console.log('[TTS] config:',JSON.stringify(cfg));
   return cfg;
 }
@@ -275,7 +268,6 @@ function parseUnicodeIndexer(buf){
   return map;
 }
 
-// voice.bin: per speaker = style_ttl(50×256=12800 f) + style_dp(8×16=128 f) = 12928 f
 function parseVoiceBin(buf,cfg){
   const view=new DataView(buf);let offset=0;
   const numSpk=view.getInt32(offset,true);offset+=4;
@@ -300,87 +292,64 @@ function textToIds(text){
   return ids;
 }
 
-// ★ FIX v4.2.4: 동적 피드 빌더 — 실제 모델 inputNames 기반으로 매핑
-function buildFeeds(session, available) {
-  const feeds={};
-  for(const inputName of session.inputNames){
-    // 1. 정확히 일치
-    if(available[inputName]!==undefined){feeds[inputName]=available[inputName];continue;}
-    // 2. 키워드 기반 퍼지 매칭
-    const low=inputName.toLowerCase();
-    let matched=false;
-    for(const[k,tensor] of Object.entries(available)){
-      const kl=k.toLowerCase();
-      const match=
-        low===kl ||
-        (kl==='z_t'&&(low==='z'||low==='z_noisy'||low==='latent'||low==='z_t')) ||
-        (kl==='t'&&(low==='t'||low==='time'||low==='timestep'||low==='time_step')) ||
-        (kl==='text_ids'&&low.includes('text')&&(low.includes('id')||low.includes('token'))) ||
-        (kl==='text_mask'&&low.includes('mask')) ||
-        (kl==='style_ttl'&&low.includes('style')&&!low.includes('dp')) ||
-        (kl==='style_dp'&&low.includes('style')&&low.includes('dp')) ||
-        (kl==='text_emb'&&(low.includes('text')&&(low.includes('emb')||low.includes('enc')||low.includes('feat'))));
-      if(match){feeds[inputName]=tensor;matched=true;break;}
-    }
-    if(!matched) console.warn('[TTS] 피드 없음:',inputName,'| 사용가능:',Object.keys(available).join(','));
-  }
-  return feeds;
-}
+function gaussianNoise(size){const a=new Float32Array(size);for(let i=0;i<size;i+=2){const u1=Math.random()||1e-10,u2=Math.random(),r=Math.sqrt(-2*Math.log(u1)),th=2*Math.PI*u2;a[i]=r*Math.cos(th);if(i+1<size)a[i+1]=r*Math.sin(th);}return a;}
 
+// ★ FIX v4.2.5: 실제 모델 입출력 이름 기반 완전 수정
+// vecEst in: noisy_latent,text_emb,style_ttl,latent_mask,text_mask,current_step,total_step
+// vecEst out: denoised_latent (ODE 업데이트 내장, 직접 z에 대입)
+// vocoder in: latent  out: wav_tts
 async function synthSupertonic(text,sid,steps,speed){
   if(!stReady)throw new Error('엔진 미준비');
   const ids=textToIds(text),seqLen=ids.length;if(!seqLen)throw new Error('입력 없음');
   const spk=voiceData[Math.min(sid,voiceData.length-1)];
   const tokT =new ort.Tensor('int64',BigInt64Array.from(ids.map(BigInt)),[1,seqLen]);
   const maskT=new ort.Tensor('float32',new Float32Array(seqLen).fill(1.0),[1,1,seqLen]);
-  const sTtl =new ort.Tensor('float32',spk.style_ttl,spk.dims_ttl);  // [1,50,256]
-  const sDp  =new ort.Tensor('float32',spk.style_dp, spk.dims_dp);   // [1,8,16]
+  const sTtl =new ort.Tensor('float32',spk.style_ttl,spk.dims_ttl);
+  const sDp  =new ort.Tensor('float32',spk.style_dp, spk.dims_dp);
 
   // 1. Duration Predictor
   showTtsProgress('1/4 Duration...');
-  const durFeeds=buildFeeds(stSess.durPred,{text_ids:tokT,style_dp:sDp,text_mask:maskT});
-  const durOut=await stSess.durPred.run(durFeeds);
-  const durKey=stSess.durPred.outputNames[0];
-  const durSecs=Array.from(durOut[durKey]?.data||[1.0])[0];
+  const durOut=await stSess.durPred.run({text_ids:tokT,style_dp:sDp,text_mask:maskT});
+  const durSecs=Array.from(durOut.duration?.data||[1.0])[0];
   const adjDur=Math.max(0.1,durSecs/(speed||1.0));
   const hop=stConfig.hop_samples,lCh=stConfig.latent_channels,sr=stConfig.sample_rate;
   const T=Math.max(1,Math.ceil(adjDur*sr/hop));
-  console.log('[TTS] dur='+durSecs.toFixed(2)+'s, adjDur='+adjDur.toFixed(2)+'s, T='+T+', lCh='+lCh);
+  console.log('[TTS] dur='+durSecs.toFixed(2)+'s T='+T+' lCh='+lCh+' hop='+hop+' sr='+sr);
 
   // 2. Text Encoder
   showTtsProgress('2/4 Encoding...');
-  const encFeeds=buildFeeds(stSess.textEnc,{text_ids:tokT,style_ttl:sTtl,text_mask:maskT});
-  const encOut=await stSess.textEnc.run(encFeeds);
-  const encKey=stSess.textEnc.outputNames[0];
-  const textEmb=encOut[encKey];
-  console.log('[TTS] textEmb shape:',textEmb?.dims?.join('×'));
+  const encOut=await stSess.textEnc.run({text_ids:tokT,style_ttl:sTtl,text_mask:maskT});
+  const textEmb=encOut.text_emb;
+  console.log('[TTS] textEmb:',textEmb?.dims?.join('x'));
 
-  // 3. Vector Estimator (flow-matching denoising loop)
+  // 3. Vector Estimator — denoised_latent 출력을 직접 z에 대입
   let z=new ort.Tensor('float32',gaussianNoise(lCh*T),[1,lCh,T]);
+  const totStepT  =new ort.Tensor('int64',BigInt64Array.from([BigInt(steps)]),[1]);
+  const latentMask=new ort.Tensor('float32',new Float32Array(T).fill(1.0),[1,1,T]);
   for(let step=0;step<steps;step++){
     showTtsProgress('3/4 Denoising '+(step+1)+'/'+steps+'...');
-    const tVal=1.0-step/steps;
-    const tT=new ort.Tensor('float32',new Float32Array([tVal]),[1]);
-    // ★ buildFeeds로 실제 inputNames에 맞게 동적 매핑
-    const vecFeeds=buildFeeds(stSess.vecEst,{z_t:z,t:tT,text_emb:textEmb,style_ttl:sTtl,text_ids:tokT,text_mask:maskT,style_dp:sDp});
-    const veOut=await stSess.vecEst.run(vecFeeds);
-    const vKey=stSess.vecEst.outputNames[0];
-    const v=veOut[vKey];
-    const dt=1.0/steps,nz=new Float32Array(z.data.length);
-    for(let i=0;i<nz.length;i++)nz[i]=z.data[i]-v.data[i]*dt;
-    z=new ort.Tensor('float32',nz,[1,lCh,T]);
+    const curStepT=new ort.Tensor('int64',BigInt64Array.from([BigInt(step)]),[1]);
+    const veOut=await stSess.vecEst.run({
+      noisy_latent: z,
+      text_emb:     textEmb,
+      style_ttl:    sTtl,
+      latent_mask:  latentMask,
+      text_mask:    maskT,
+      current_step: curStepT,
+      total_step:   totStepT,
+    });
+    z=veOut.denoised_latent;
+    console.log('[TTS] step'+step+' z:',z?.dims?.join('x'));
   }
 
   // 4. Vocoder
   showTtsProgress('4/4 Vocoder...');
-  const vocFeeds=buildFeeds(stSess.vocoder,{z_t:z,z:z,latent:z});
-  const vocOut=await stSess.vocoder.run(vocFeeds);
-  const vocKey=stSess.vocoder.outputNames[0];
+  const vocOut=await stSess.vocoder.run({latent:z});
+  const audio=vocOut.wav_tts;
+  console.log('[TTS] wav_tts:',audio?.dims?.join('x'),audio?.data?.length,'samples');
   hideTtsProgress();
-  return{samples:Float32Array.from(vocOut[vocKey].data),sampleRate:sr};
+  return{samples:Float32Array.from(audio.data),sampleRate:sr};
 }
-
-function gaussianNoise(size){const a=new Float32Array(size);for(let i=0;i<size;i+=2){const u1=Math.random()||1e-10,u2=Math.random(),r=Math.sqrt(-2*Math.log(u1)),th=2*Math.PI*u2;a[i]=r*Math.cos(th);if(i+1<size)a[i+1]=r*Math.sin(th);}return a;}
 
 function float32ToWav(s,sr){const l=s.length,b=new ArrayBuffer(44+l*2),v=new DataView(b),w4=(o,x)=>v.setUint32(o,x,true),w2=(o,x)=>v.setUint16(o,x,true);[82,73,70,70].forEach((x,i)=>v.setUint8(i,x));w4(4,36+l*2);[87,65,86,69].forEach((x,i)=>v.setUint8(8+i,x));[102,109,116,32].forEach((x,i)=>v.setUint8(12+i,x));w4(16,16);w2(20,1);w2(22,1);w4(24,sr);w4(28,sr*2);w2(32,2);w2(34,16);[100,97,116,97].forEach((x,i)=>v.setUint8(36+i,x));w4(40,l*2);for(let i=0;i<l;i++){const x=Math.max(-1,Math.min(1,s[i]));v.setInt16(44+i*2,x<0?x*32768:x*32767,true);}return b;}
 
@@ -439,7 +408,6 @@ function setStBadge(cls,text){const el=document.getElementById('st-badge');el.cl
 function showTtsProgress(msg){const el=document.getElementById('tts-progress');el.textContent=msg;el.classList.add('show');}
 function hideTtsProgress(){document.getElementById('tts-progress').classList.remove('show');}
 
-// ══ INIT ══
 async function init(){
   try{const d=JSON.parse(localStorage.getItem('ah-v42')||'{}');S.model=d.model||'claude';S.freestyle=d.freestyle||false;WS.rate=d.wsRate||1.0;WS.pitch=d.wsPitch||1.0;STP.sid=d.stSid||0;STP.steps=d.stSteps||5;STP.speed=d.stSpeed||1.0;}catch(_){}
   setModel(S.model,false);if(S.freestyle)applyFreestyle(false);
@@ -452,7 +420,6 @@ async function init(){
 }
 function save(){localStorage.setItem('ah-v42',JSON.stringify({model:S.model,freestyle:S.freestyle,wsRate:WS.rate,wsPitch:WS.pitch,stSid:STP.sid,stSteps:STP.steps,stSpeed:STP.speed}));}
 
-// ══ SSE ══
 function connectNotifSSE(){
   if(sseConn){sseConn.close();sseConn=null;}
   const es=new EventSource('/api/notifications/stream');sseConn=es;
@@ -461,7 +428,6 @@ function connectNotifSSE(){
   es.onerror=()=>{document.getElementById('sse-dot').className='err';};
 }
 
-// ══ STATUS ══
 async function checkStatus(){
   try{const d=await(await fetch('/api/status')).json();const s=d.drive?.status||'';
     if(s.startsWith('loaded'))setKB('KB '+(d.drive?.chars>0?'연결됨':'0'),'#5a8a6a');
