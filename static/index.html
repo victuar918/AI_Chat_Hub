@@ -168,7 +168,7 @@ const STP={steps:5,speed:1.0,sid:0};
 let pendingNotifs=[],btrOpen=false,sseConn=null;
 const MODEL_STYLE={claude:{avClass:'a-claude',whoClass:'claude',label:'CLAUDE',icon:'✦'},gemini:{avClass:'a-gemini',whoClass:'gemini',label:'GEMINI',icon:'◈'}};
 
-// ══ SUPERTONIC ENGINE v4.2.6 ══
+// ══ SUPERTONIC ENGINE v4.2.7 ══
 const TTS_DB_NAME='asterion-tts-v1',TTS_STORE='model-files';
 const REQUIRED=['duration_predictor.int8.onnx','text_encoder.int8.onnx','vector_estimator.int8.onnx','vocoder.int8.onnx','tts.json','unicode_indexer.bin','voice.bin'];
 let ttsDb=null,stReady=false,stLoading=false,stSess={},stConfig=null,uniMap=null,voiceData=null;
@@ -246,16 +246,14 @@ function parseTtsJson(text){
   const dpSTL =dp.style_encoder?.style_token_layer||{};
   const cfg={
     sample_rate:    ae.sample_rate||44100,
-    base_chunk_size:ae.base_chunk_size||512,   // AE hop = 512
-    latent_dim:     ttl.latent_dim||24,         // vocoder latent dim = 24
+    base_chunk_size:ae.base_chunk_size||512,
+    latent_dim:     ttl.latent_dim||24,
     chunk_compress_factor:ttl.chunk_compress_factor||6,
     n_style_ttl:    ttlSTL.n_style||50,
     style_dim_ttl:  ttlSTL.style_value_dim||256,
     n_style_dp:     dpSTL.n_style||8,
     style_dim_dp:   dpSTL.style_value_dim||16,
   };
-  // hop_samples = AE hop size (NOT compressed by CCF for the latent space)
-  // latent z lives in [1, latent_dim, T_ae] space where T_ae = dur * sr / base_chunk_size
   console.log('[TTS] config:',JSON.stringify(cfg));
   return cfg;
 }
@@ -294,46 +292,47 @@ function textToIds(text){
 
 function gaussianNoise(size){const a=new Float32Array(size);for(let i=0;i<size;i+=2){const u1=Math.random()||1e-10,u2=Math.random(),r=Math.sqrt(-2*Math.log(u1)),th=2*Math.PI*u2;a[i]=r*Math.cos(th);if(i+1<size)a[i+1]=r*Math.sin(th);}return a;}
 
-// ★ FIX v4.2.6: noisy_latent shape 수정
-// vocoder는 [1, 24, T_ae]를 입력받음 → flow-matching도 같은 latent space 사용
-// T_ae = ceil(dur * sr / base_chunk_size) = ceil(dur * 44100 / 512)
-// proj_in의 CCF=6은 모델 내부에서 처리 (외부 z는 [1, 24, T_ae])
+// ★ FIX v4.2.7
+// 1. T_ae를 chunk_compress_factor(6)의 배수로 올림
+//    → 모델 내부 proj_in reshape가 T_ae/6 정수 나눗셈을 요구함
+//    → 예: 87 → 90 (=15×6), 173 → 174 (=29×6)
+// 2. current_step/total_step: int64 → int32
+//    → WASM 백엔드에서 스칼라 int64 처리 불안정 이슈 대응
 async function synthSupertonic(text,sid,steps,speed){
   if(!stReady)throw new Error('엔진 미준비');
   const ids=textToIds(text),seqLen=ids.length;if(!seqLen)throw new Error('입력 없음');
   const spk=voiceData[Math.min(sid,voiceData.length-1)];
   const tokT =new ort.Tensor('int64',BigInt64Array.from(ids.map(BigInt)),[1,seqLen]);
   const maskT=new ort.Tensor('float32',new Float32Array(seqLen).fill(1.0),[1,1,seqLen]);
-  const sTtl =new ort.Tensor('float32',spk.style_ttl,spk.dims_ttl);  // [1,50,256]
-  const sDp  =new ort.Tensor('float32',spk.style_dp, spk.dims_dp);   // [1,8,16]
+  const sTtl =new ort.Tensor('float32',spk.style_ttl,spk.dims_ttl);
+  const sDp  =new ort.Tensor('float32',spk.style_dp, spk.dims_dp);
 
-  // 1. Duration Predictor
   showTtsProgress('1/4 Duration...');
   const durOut=await stSess.durPred.run({text_ids:tokT,style_dp:sDp,text_mask:maskT});
   const durSecs=Array.from(durOut.duration?.data||[1.0])[0];
   const adjDur=Math.max(0.1,durSecs/(speed||1.0));
-  const sr  =stConfig.sample_rate;     // 44100
-  const bcs =stConfig.base_chunk_size; // 512 (AE hop)
-  const lDim=stConfig.latent_dim;      // 24
-  // ★ T_ae = AE full-resolution frames (NOT divided by CCF)
-  const T_ae=Math.max(1,Math.ceil(adjDur*sr/bcs));
-  console.log('[TTS] dur='+durSecs.toFixed(2)+'s T_ae='+T_ae+' lDim='+lDim+' sr='+sr+' bcs='+bcs);
+  const sr  =stConfig.sample_rate;
+  const bcs =stConfig.base_chunk_size;
+  const lDim=stConfig.latent_dim;
+  const ccf =stConfig.chunk_compress_factor||6;
+  // ★ T_ae는 반드시 CCF의 배수여야 함 (모델 내부 reshape 조건)
+  const T_raw=Math.max(ccf,Math.ceil(adjDur*sr/bcs));
+  const T_ae =Math.ceil(T_raw/ccf)*ccf;  // 6의 배수로 올림
+  console.log('[TTS] dur='+durSecs.toFixed(2)+'s T_raw='+T_raw+' T_ae='+T_ae+' (×'+ccf+') lDim='+lDim);
 
-  // 2. Text Encoder
   showTtsProgress('2/4 Encoding...');
   const encOut=await stSess.textEnc.run({text_ids:tokT,style_ttl:sTtl,text_mask:maskT});
   const textEmb=encOut.text_emb;
   console.log('[TTS] textEmb:',textEmb?.dims?.join('x'));
 
-  // 3. Vector Estimator
-  // noisy_latent: [1, 24, T_ae]  (same space as vocoder input)
-  // latent_mask:  [1, 1, T_ae]
-  let z=new ort.Tensor('float32',gaussianNoise(lDim*T_ae),[1,lDim,T_ae]);
-  const totStepT  =new ort.Tensor('int64',BigInt64Array.from([BigInt(steps)]),[1]);
+  // ★ int32로 변경 (WASM 백엔드 스칼라 int64 불안정 대응)
+  const totStepT  =new ort.Tensor('int32',Int32Array.from([steps]),[1]);
   const latentMask=new ort.Tensor('float32',new Float32Array(T_ae).fill(1.0),[1,1,T_ae]);
+  let z=new ort.Tensor('float32',gaussianNoise(lDim*T_ae),[1,lDim,T_ae]);
+
   for(let step=0;step<steps;step++){
     showTtsProgress('3/4 Denoising '+(step+1)+'/'+steps+'...');
-    const curStepT=new ort.Tensor('int64',BigInt64Array.from([BigInt(step)]),[1]);
+    const curStepT=new ort.Tensor('int32',Int32Array.from([step]),[1]);
     const veOut=await stSess.vecEst.run({
       noisy_latent: z,
       text_emb:     textEmb,
@@ -347,7 +346,6 @@ async function synthSupertonic(text,sid,steps,speed){
     console.log('[TTS] step'+step+' z:',z?.dims?.join('x'));
   }
 
-  // 4. Vocoder: latent [1,24,T_ae] → wav_tts
   showTtsProgress('4/4 Vocoder...');
   const vocOut=await stSess.vocoder.run({latent:z});
   const audio=vocOut.wav_tts;
@@ -367,7 +365,14 @@ async function speakText(text,btnEl){
   if(stReady){
     btnEl.innerHTML='⏸ 정지';btnEl.classList.add('playing');WS.activeBtn=btnEl;
     try{const{samples,sampleRate}=await synthSupertonic(stripMd(text),STP.sid,STP.steps,STP.speed);await playWavBuffer(float32ToWav(samples,sampleRate));}
-    catch(e){console.warn('[TTS] Supertonic 오류:',e.message);toast('Supertonic 오류: '+e.message.slice(0,60));wsFallback(text,btnEl);return;}
+    catch(e){
+      const msg=String(e?.message||e);
+      console.error('[TTS 전체 오류]',msg);
+      // 설정 패널에 전체 에러 표시 (가려짐 방지)
+      document.getElementById('st-status-msg').textContent='오류: '+msg;
+      toast(msg.slice(0,80),8000);
+      wsFallback(text,btnEl);return;
+    }
     btnEl.innerHTML='▶ 재생';btnEl.classList.remove('playing');WS.activeBtn=null;return;
   }
   wsFallback(text,btnEl);
@@ -390,7 +395,11 @@ async function testTts(){
   if(stReady){
     btn.textContent='⏸ 정지';btn.classList.add('playing');WS.activeBtn=btn;
     try{const{samples,sampleRate}=await synthSupertonic(TEST_TEXT,STP.sid,STP.steps,STP.speed);await playWavBuffer(float32ToWav(samples,sampleRate));}
-    catch(e){toast('Supertonic 오류: '+e.message.slice(0,60));console.error('[TTS]',e);}
+    catch(e){
+      const msg=String(e?.message||e);
+      document.getElementById('st-status-msg').textContent='오류: '+msg;
+      toast(msg.slice(0,80),8000);console.error('[TTS]',e);
+    }
     btn.textContent='▶ 테스트 재생';btn.classList.remove('playing');WS.activeBtn=null;
   }else{toast('모델 미설치 — Web Speech로 재생');testWsSpeech();}
 }
