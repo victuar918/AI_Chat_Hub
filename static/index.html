@@ -168,7 +168,7 @@ const STP={steps:5,speed:1.0,sid:0};
 let pendingNotifs=[],btrOpen=false,sseConn=null;
 const MODEL_STYLE={claude:{avClass:'a-claude',whoClass:'claude',label:'CLAUDE',icon:'✦'},gemini:{avClass:'a-gemini',whoClass:'gemini',label:'GEMINI',icon:'◈'}};
 
-// ══ SUPERTONIC ENGINE v4.2.5 ══
+// ══ SUPERTONIC ENGINE v4.2.6 ══
 const TTS_DB_NAME='asterion-tts-v1',TTS_STORE='model-files';
 const REQUIRED=['duration_predictor.int8.onnx','text_encoder.int8.onnx','vector_estimator.int8.onnx','vocoder.int8.onnx','tts.json','unicode_indexer.bin','voice.bin'];
 let ttsDb=null,stReady=false,stLoading=false,stSess={},stConfig=null,uniMap=null,voiceData=null;
@@ -226,7 +226,7 @@ async function initSupertonic(){
       vecEst: {in:[...stSess.vecEst.inputNames], out:[...stSess.vecEst.outputNames]},
       vocoder:{in:[...stSess.vocoder.inputNames],out:[...stSess.vocoder.outputNames]},
     };
-    console.log('[TTS] 모델 입출력 이름:',JSON.stringify(names,null,2));
+    console.log('[TTS] 모델 이름:',JSON.stringify(names,null,2));
     const nmEl=document.getElementById('st-model-names');
     nmEl.style.display='block';
     nmEl.textContent='durPred in:'+names.durPred.in.join(',')+' out:'+names.durPred.out.join(',')+'\n'+
@@ -246,16 +246,16 @@ function parseTtsJson(text){
   const dpSTL =dp.style_encoder?.style_token_layer||{};
   const cfg={
     sample_rate:    ae.sample_rate||44100,
-    base_chunk_size:ae.base_chunk_size||512,
-    latent_dim:     ttl.latent_dim||24,
+    base_chunk_size:ae.base_chunk_size||512,   // AE hop = 512
+    latent_dim:     ttl.latent_dim||24,         // vocoder latent dim = 24
     chunk_compress_factor:ttl.chunk_compress_factor||6,
     n_style_ttl:    ttlSTL.n_style||50,
     style_dim_ttl:  ttlSTL.style_value_dim||256,
     n_style_dp:     dpSTL.n_style||8,
     style_dim_dp:   dpSTL.style_value_dim||16,
   };
-  cfg.latent_channels=cfg.latent_dim*cfg.chunk_compress_factor;
-  cfg.hop_samples    =cfg.base_chunk_size*cfg.chunk_compress_factor;
+  // hop_samples = AE hop size (NOT compressed by CCF for the latent space)
+  // latent z lives in [1, latent_dim, T_ae] space where T_ae = dur * sr / base_chunk_size
   console.log('[TTS] config:',JSON.stringify(cfg));
   return cfg;
 }
@@ -294,27 +294,30 @@ function textToIds(text){
 
 function gaussianNoise(size){const a=new Float32Array(size);for(let i=0;i<size;i+=2){const u1=Math.random()||1e-10,u2=Math.random(),r=Math.sqrt(-2*Math.log(u1)),th=2*Math.PI*u2;a[i]=r*Math.cos(th);if(i+1<size)a[i+1]=r*Math.sin(th);}return a;}
 
-// ★ FIX v4.2.5: 실제 모델 입출력 이름 기반 완전 수정
-// vecEst in: noisy_latent,text_emb,style_ttl,latent_mask,text_mask,current_step,total_step
-// vecEst out: denoised_latent (ODE 업데이트 내장, 직접 z에 대입)
-// vocoder in: latent  out: wav_tts
+// ★ FIX v4.2.6: noisy_latent shape 수정
+// vocoder는 [1, 24, T_ae]를 입력받음 → flow-matching도 같은 latent space 사용
+// T_ae = ceil(dur * sr / base_chunk_size) = ceil(dur * 44100 / 512)
+// proj_in의 CCF=6은 모델 내부에서 처리 (외부 z는 [1, 24, T_ae])
 async function synthSupertonic(text,sid,steps,speed){
   if(!stReady)throw new Error('엔진 미준비');
   const ids=textToIds(text),seqLen=ids.length;if(!seqLen)throw new Error('입력 없음');
   const spk=voiceData[Math.min(sid,voiceData.length-1)];
   const tokT =new ort.Tensor('int64',BigInt64Array.from(ids.map(BigInt)),[1,seqLen]);
   const maskT=new ort.Tensor('float32',new Float32Array(seqLen).fill(1.0),[1,1,seqLen]);
-  const sTtl =new ort.Tensor('float32',spk.style_ttl,spk.dims_ttl);
-  const sDp  =new ort.Tensor('float32',spk.style_dp, spk.dims_dp);
+  const sTtl =new ort.Tensor('float32',spk.style_ttl,spk.dims_ttl);  // [1,50,256]
+  const sDp  =new ort.Tensor('float32',spk.style_dp, spk.dims_dp);   // [1,8,16]
 
   // 1. Duration Predictor
   showTtsProgress('1/4 Duration...');
   const durOut=await stSess.durPred.run({text_ids:tokT,style_dp:sDp,text_mask:maskT});
   const durSecs=Array.from(durOut.duration?.data||[1.0])[0];
   const adjDur=Math.max(0.1,durSecs/(speed||1.0));
-  const hop=stConfig.hop_samples,lCh=stConfig.latent_channels,sr=stConfig.sample_rate;
-  const T=Math.max(1,Math.ceil(adjDur*sr/hop));
-  console.log('[TTS] dur='+durSecs.toFixed(2)+'s T='+T+' lCh='+lCh+' hop='+hop+' sr='+sr);
+  const sr  =stConfig.sample_rate;     // 44100
+  const bcs =stConfig.base_chunk_size; // 512 (AE hop)
+  const lDim=stConfig.latent_dim;      // 24
+  // ★ T_ae = AE full-resolution frames (NOT divided by CCF)
+  const T_ae=Math.max(1,Math.ceil(adjDur*sr/bcs));
+  console.log('[TTS] dur='+durSecs.toFixed(2)+'s T_ae='+T_ae+' lDim='+lDim+' sr='+sr+' bcs='+bcs);
 
   // 2. Text Encoder
   showTtsProgress('2/4 Encoding...');
@@ -322,10 +325,12 @@ async function synthSupertonic(text,sid,steps,speed){
   const textEmb=encOut.text_emb;
   console.log('[TTS] textEmb:',textEmb?.dims?.join('x'));
 
-  // 3. Vector Estimator — denoised_latent 출력을 직접 z에 대입
-  let z=new ort.Tensor('float32',gaussianNoise(lCh*T),[1,lCh,T]);
+  // 3. Vector Estimator
+  // noisy_latent: [1, 24, T_ae]  (same space as vocoder input)
+  // latent_mask:  [1, 1, T_ae]
+  let z=new ort.Tensor('float32',gaussianNoise(lDim*T_ae),[1,lDim,T_ae]);
   const totStepT  =new ort.Tensor('int64',BigInt64Array.from([BigInt(steps)]),[1]);
-  const latentMask=new ort.Tensor('float32',new Float32Array(T).fill(1.0),[1,1,T]);
+  const latentMask=new ort.Tensor('float32',new Float32Array(T_ae).fill(1.0),[1,1,T_ae]);
   for(let step=0;step<steps;step++){
     showTtsProgress('3/4 Denoising '+(step+1)+'/'+steps+'...');
     const curStepT=new ort.Tensor('int64',BigInt64Array.from([BigInt(step)]),[1]);
@@ -342,7 +347,7 @@ async function synthSupertonic(text,sid,steps,speed){
     console.log('[TTS] step'+step+' z:',z?.dims?.join('x'));
   }
 
-  // 4. Vocoder
+  // 4. Vocoder: latent [1,24,T_ae] → wav_tts
   showTtsProgress('4/4 Vocoder...');
   const vocOut=await stSess.vocoder.run({latent:z});
   const audio=vocOut.wav_tts;
