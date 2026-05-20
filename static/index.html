@@ -168,15 +168,12 @@ const STP={steps:5,speed:1.0,sid:0};
 let pendingNotifs=[],btrOpen=false,sseConn=null;
 const MODEL_STYLE={claude:{avClass:'a-claude',whoClass:'claude',label:'CLAUDE',icon:'✦'},gemini:{avClass:'a-gemini',whoClass:'gemini',label:'GEMINI',icon:'◈'}};
 
-// ══ SUPERTONIC ENGINE v4.2.9 ══
-// 파일 분석 기반 완전 수정:
-// 1. unicode_indexer.bin = 65536 int32 평탄 배열 (코드포인트→토큰ID, -1=없음)
-//    한글 매핑 없음 → 직접 룩업, [ko] 태그 제거
-// 2. voice.bin 헤더 = 6×int64 = 48 bytes
-//    [num_spk=10, n_ttl=50, d_ttl=256, unk=10, n_dp=8, d_dp=16] + float32 데이터
-// 3. noisy_latent = [1, 144, T_ttl] (에러 확인: Expected 144)
-// 4. step 텐서 = int32
-
+// ══ SUPERTONIC ENGINE v4.2.10 ══
+// 확정 수정 사항:
+// 1. voice.bin 헤더 = 6×int64 (48 bytes) + float32 데이터
+// 2. unicode_indexer.bin = 65536 int32 평탄 배열
+// 3. noisy_latent = [1, 144, T_ttl]
+// 4. ★ current_step/total_step = float32 (에러 확인: expected tensor(float))
 const TTS_DB_NAME='asterion-tts-v1',TTS_STORE='model-files';
 const REQUIRED=['duration_predictor.int8.onnx','text_encoder.int8.onnx','vector_estimator.int8.onnx','vocoder.int8.onnx','tts.json','unicode_indexer.bin','voice.bin'];
 let ttsDb=null,stReady=false,stLoading=false,stSess={},stConfig=null,uniMap=null,voiceData=null;
@@ -217,12 +214,8 @@ async function initSupertonic(){
     ort.env.wasm.wasmPaths=window.__ORT_CDN;ort.env.wasm.numThreads=2;
     const files={};for(const n of REQUIRED){const b=await loadTtsFile(n);if(!b)throw new Error('누락: '+n);files[n]=b;}
     stConfig=parseTtsJson(new TextDecoder().decode(files['tts.json']));
-    // ★ unicode_indexer: flat Int32Array (65536 entries, BMP lookup)
     uniMap=new Int32Array(files['unicode_indexer.bin']);
-    console.log('[TTS] uniMap size:',uniMap.length,'valid:',Array.from(uniMap).filter(v=>v>=0).length);
-    // ★ voice.bin: 6×int64 header (48 bytes) + float32 data
     voiceData=parseVoiceBin(files['voice.bin'],stConfig);
-    console.log('[TTS] speakers:',voiceData.length);
     showTtsProgress('ONNX 세션 로딩 (1~2분)...');
     stSess.durPred =await ort.InferenceSession.create(files['duration_predictor.int8.onnx'],{executionProviders:['wasm']});
     stSess.textEnc =await ort.InferenceSession.create(files['text_encoder.int8.onnx'],{executionProviders:['wasm']});
@@ -259,23 +252,16 @@ function parseTtsJson(text){
   return cfg;
 }
 
-// ★ FIX v4.2.9: voice.bin 헤더 = 6×int64 (48 bytes)
-// [num_spk=10][n_ttl=50][d_ttl=256][unk=10][n_dp=8][d_dp=16] + float32 데이터
 function parseVoiceBin(buf,cfg){
   const view=new DataView(buf);
-  // Read 6 int64s (as int32 pairs LE — values fit in 32 bits)
-  const numSpk=view.getInt32(0, true);   // offset 0
-  const nTtl  =view.getInt32(8, true);   // offset 8
-  const dTtl  =view.getInt32(16,true);   // offset 16
-  // offset 24 = unknown (another 10)
-  const nDp   =view.getInt32(32,true);   // offset 32
-  const dDp   =view.getInt32(40,true);   // offset 40
-  const DATA_START = 48;                 // data starts after 6×int64 header
-
+  const numSpk=view.getInt32(0, true);
+  const nTtl  =view.getInt32(8, true);
+  const dTtl  =view.getInt32(16,true);
+  const nDp   =view.getInt32(32,true);
+  const dDp   =view.getInt32(40,true);
+  const DATA_START=48;
   const ttlLen=nTtl*dTtl, dpLen=nDp*dDp;
-  console.log('[TTS voice.bin] header: numSpk='+numSpk+' n_ttl='+nTtl+' d_ttl='+dTtl+' n_dp='+nDp+' d_dp='+dDp);
-  console.log('[TTS voice.bin] ttlLen='+ttlLen+' dpLen='+dpLen+' dataStart='+DATA_START+' fileSize='+buf.byteLength);
-
+  console.log('[TTS voice.bin] numSpk='+numSpk+' n_ttl='+nTtl+' d_ttl='+dTtl+' n_dp='+nDp+' d_dp='+dDp+' dataStart='+DATA_START);
   let offset=DATA_START;
   const speakers=[];
   for(let s=0;s<numSpk&&offset+(ttlLen+dpLen)*4<=buf.byteLength;s++){
@@ -287,25 +273,14 @@ function parseVoiceBin(buf,cfg){
   return speakers;
 }
 
-// ★ FIX v4.2.9: unicode_indexer = flat Int32Array (65536 entries)
-// 한글 직접 매핑 없음 → 매핑된 문자(ASCII 등)만 사용, 나머지 건너뜀
-// [ko]/[/ko] 태그 제거 ([ ] 모두 매핑 없음)
 function textToIds(text){
   const ids=[];
   for(const ch of text){
     const cp=ch.codePointAt(0);
-    if(uniMap&&cp<65536){
-      const tid=uniMap[cp];
-      if(tid>=0)ids.push(tid);
-      // 매핑 없는 문자(한글 등)는 건너뜀
-    }
+    if(uniMap&&cp<65536){const tid=uniMap[cp];if(tid>=0)ids.push(tid);}
   }
-  // 최소 1개 토큰 확보 (fallback)
-  if(!ids.length){
-    console.warn('[TTS] 매핑된 토큰 없음. 텍스트:',text.slice(0,20));
-    for(const ch of text.slice(0,5))ids.push(ch.codePointAt(0)%256);
-  }
-  console.log('[TTS] textToIds: 입력 '+text.length+'자 → '+ids.length+'개 토큰');
+  if(!ids.length){console.warn('[TTS] 매핑된 토큰 없음');for(const ch of text.slice(0,5))ids.push(ch.codePointAt(0)%256);}
+  console.log('[TTS] textToIds:',ids.length,'토큰');
   return ids;
 }
 
@@ -317,31 +292,29 @@ async function synthSupertonic(text,sid,steps,speed){
   const spk=voiceData[Math.min(sid,voiceData.length-1)];
   const tokT =new ort.Tensor('int64',BigInt64Array.from(ids.map(BigInt)),[1,seqLen]);
   const maskT=new ort.Tensor('float32',new Float32Array(seqLen).fill(1.0),[1,1,seqLen]);
-  const sTtl =new ort.Tensor('float32',spk.style_ttl,spk.dims_ttl);  // [1,50,256]
-  const sDp  =new ort.Tensor('float32',spk.style_dp, spk.dims_dp);   // [1,8,16]
+  const sTtl =new ort.Tensor('float32',spk.style_ttl,spk.dims_ttl);
+  const sDp  =new ort.Tensor('float32',spk.style_dp, spk.dims_dp);
 
   showTtsProgress('1/4 Duration...');
   const durOut=await stSess.durPred.run({text_ids:tokT,style_dp:sDp,text_mask:maskT});
   const durSecs=Array.from(durOut.duration?.data||[1.0])[0];
   const adjDur=Math.max(0.1,durSecs/(speed||1.0));
-  const sr  =stConfig.sample_rate;
-  const hop =stConfig.hop_samples;      // 3072
-  const lCh =stConfig.latent_channels;  // 144
-  const T   =Math.max(1,Math.ceil(adjDur*sr/hop));
+  const sr=stConfig.sample_rate, hop=stConfig.hop_samples, lCh=stConfig.latent_channels;
+  const T=Math.max(1,Math.ceil(adjDur*sr/hop));
   console.log('[TTS] dur='+durSecs.toFixed(2)+'s T='+T+' lCh='+lCh);
 
   showTtsProgress('2/4 Encoding...');
   const encOut=await stSess.textEnc.run({text_ids:tokT,style_ttl:sTtl,text_mask:maskT});
   const textEmb=encOut.text_emb;
 
-  // noisy_latent: [1, 144, T_ttl] — 파일 분석 확인: Expected 144
-  // step tensors: int32 (int64 WASM 불안정 대응)
+  // ★ FIX v4.2.10: current_step/total_step = float32
+  // 에러 확인: "Actual: tensor(int32), expected: tensor(float)"
   let z=new ort.Tensor('float32',gaussianNoise(lCh*T),[1,lCh,T]);
-  const totStepT  =new ort.Tensor('int32',Int32Array.from([steps]),[1]);
+  const totStepT  =new ort.Tensor('float32',new Float32Array([steps]),[1]);
   const latentMask=new ort.Tensor('float32',new Float32Array(T).fill(1.0),[1,1,T]);
   for(let step=0;step<steps;step++){
     showTtsProgress('3/4 Denoising '+(step+1)+'/'+steps+'...');
-    const curStepT=new ort.Tensor('int32',Int32Array.from([step]),[1]);
+    const curStepT=new ort.Tensor('float32',new Float32Array([step]),[1]);
     const veOut=await stSess.vecEst.run({
       noisy_latent: z,
       text_emb:     textEmb,
