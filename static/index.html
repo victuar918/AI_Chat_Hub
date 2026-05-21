@@ -177,16 +177,12 @@ const STP={steps:5,speed:1.0,sid:0,lang:'en'};
 let pendingNotifs=[],btrOpen=false,sseConn=null;
 const MODEL_STYLE={claude:{avClass:'a-claude',whoClass:'claude',label:'CLAUDE',icon:'✦'},gemini:{avClass:'a-gemini',whoClass:'gemini',label:'GEMINI',icon:'◈'}};
 
-// ══ SUPERTONIC ENGINE v4.2.11 ══
-// 핵심 수정 사항 (C++ 소스 분석 기반):
-// 1. textToIds: NFKD 정규화 → 한글 음절을 자모(Jamo U+1100~)로 분해
-//    - DecomposeCharacter() in C++ = JS .normalize('NFKD')와 동일 알고리즘
-//    - unicode_indexer.bin에는 Jamo 매핑 있음 (sherpa-onnx C++ 코드에서 확인)
-// 2. PreprocessText: '<' + lang + '>' + text + '</' + lang + '>'
-//    - 한국어: <ko>안녕하세요.</ko>
-// 3. sample_rate = cfg.ae.sample_rate = tts.json의 44100 Hz (24000Hz 아님!)
-// 4. current_step/total_step = float32 (v4.2.10에서 수정됨)
-// 5. kUnknownId = 0 (C++), 우리는 tid>=0인 것만 push (안전)
+// ══ SUPERTONIC ENGINE v4.2.12 ══
+// v4.2.11: NFKD 한국어 처리 + 언어 태그 래핑
+// v4.2.12: ★ FIX voice.bin 파싱 버그
+//   - 기존(오류): 화자별 TTL→DP 교차 읽기 → 화자 0만 TTL 우연히 맞음
+//   - C++ 실제:  [모든 화자 TTL 블록][모든 화자 DP 블록]
+//   - TTL_START=48, DP_START=48+numSpk*ttlLen*4
 const TTS_DB_NAME='asterion-tts-v1',TTS_STORE='model-files';
 const REQUIRED=['duration_predictor.int8.onnx','text_encoder.int8.onnx','vector_estimator.int8.onnx','vocoder.int8.onnx','tts.json','unicode_indexer.bin','voice.bin'];
 let ttsDb=null,stReady=false,stLoading=false,stSess={},stConfig=null,uniMap=null,voiceData=null;
@@ -259,57 +255,58 @@ function parseTtsJson(text){
     n_style_dp:     dpSTL.n_style||8,
     style_dim_dp:   dpSTL.style_value_dim||16,
   };
-  cfg.latent_channels=cfg.latent_dim*cfg.chunk_compress_factor; // 144
-  cfg.hop_samples    =cfg.base_chunk_size*cfg.chunk_compress_factor; // 3072
+  cfg.latent_channels=cfg.latent_dim*cfg.chunk_compress_factor;
+  cfg.hop_samples    =cfg.base_chunk_size*cfg.chunk_compress_factor;
   console.log('[TTS] config:',JSON.stringify(cfg));
   return cfg;
 }
 
+// ★ FIX v4.2.12: C++ 실제 레이아웃 = [모든 화자 TTL 블록] + [모든 화자 DP 블록]
+// C++ offline-tts-supertonic-impl.cc:
+//   memcpy(ttl_data, buf+48, numSpk*ttlLen*4)           ← 모든 화자 TTL 먼저
+//   memcpy(dp_data,  buf+48+numSpk*ttlLen*4, ...)       ← 그 다음 모든 화자 DP
+// 기존(v4.2.11 이하) 오류: 화자별 TTL→DP 교차 읽기
+//   화자 0: TTL=offset 48 (우연히 맞음), DP=51248 (오류)
+//   화자 1+: TTL/DP 모두 오류 → 왜곡
 function parseVoiceBin(buf,cfg){
   const view=new DataView(buf);
-  // Header: 6 × int64 (little-endian) = 48 bytes
-  // [numSpk_ttl, n_ttl, d_ttl, numSpk_dp, n_dp, d_dp]
-  const numSpk=view.getInt32(0, true);  // lower 32 bits of int64
+  const numSpk=view.getInt32(0, true);
   const nTtl  =view.getInt32(8, true);
   const dTtl  =view.getInt32(16,true);
   const nDp   =view.getInt32(32,true);
   const dDp   =view.getInt32(40,true);
-  const DATA_START=48;
   const ttlLen=nTtl*dTtl, dpLen=nDp*dDp;
-  console.log('[TTS voice.bin] numSpk='+numSpk+' n_ttl='+nTtl+' d_ttl='+dTtl+' n_dp='+nDp+' d_dp='+dDp+' dataStart='+DATA_START);
-  let offset=DATA_START;
+  const TTL_START=48;
+  const DP_START =48+numSpk*ttlLen*4;
+  console.log('[TTS v4.2.12] numSpk='+numSpk+' n_ttl='+nTtl+' d_ttl='+dTtl+' n_dp='+nDp+' d_dp='+dDp);
+  console.log('[TTS v4.2.12] TTL_START='+TTL_START+' DP_START='+DP_START+' fileSize='+buf.byteLength);
   const speakers=[];
-  for(let s=0;s<numSpk&&offset+(ttlLen+dpLen)*4<=buf.byteLength;s++){
-    const st=new Float32Array(buf,offset,ttlLen);offset+=ttlLen*4;
-    const sd=new Float32Array(buf,offset,dpLen); offset+=dpLen*4;
-    speakers.push({style_ttl:Float32Array.from(st),style_dp:Float32Array.from(sd),dims_ttl:[1,nTtl,dTtl],dims_dp:[1,nDp,dDp]});
+  for(let s=0;s<numSpk;s++){
+    const tOff=TTL_START+s*ttlLen*4;
+    const dOff=DP_START +s*dpLen *4;
+    if(tOff+ttlLen*4>buf.byteLength||dOff+dpLen*4>buf.byteLength)break;
+    speakers.push({
+      style_ttl:Float32Array.from(new Float32Array(buf,tOff,ttlLen)),
+      style_dp :Float32Array.from(new Float32Array(buf,dOff,dpLen)),
+      dims_ttl:[1,nTtl,dTtl],dims_dp:[1,nDp,dDp]
+    });
   }
   if(!speakers.length)console.error('[TTS] voice.bin 파싱 실패');
   return speakers;
 }
 
-// ★ v4.2.11 핵심: NFKD 정규화 + 언어 태그 래핑
-// C++ DecomposeCharacter() 분석 결과:
-//   - 한글 음절(U+AC00~) → NFKD → 자모(U+1100 초성, U+1161 중성, U+11A7 종성)
-//   - JS normalize('NFKD')와 동일한 Hangul decomposition 알고리즘
-//   - unicode_indexer.bin에 자모 매핑 있음 (sherpa-onnx C++ 코드 사용)
-// PreprocessText() 분석 결과:
-//   - result = "<" + lang + ">" + result + "</" + lang + ">"
+// v4.2.11: NFKD 정규화 + 언어 태그 래핑 (C++ PreprocessText 동일)
 function textToIds(text, lang){
-  // Step 1: NFKD 정규화 (한글 음절 → 자모 분해, 라틴 분음부호 분리 등)
   let normalized = text.normalize('NFKD');
-  // Step 2: 언어 태그 래핑 (C++ PreprocessText 동일)
   if(lang && lang !== 'na'){
     normalized = '<'+lang+'>'+normalized+'</'+lang+'>';
   }
-  // Step 3: 코드포인트별 token_id 룩업
   const ids=[];
   for(const ch of normalized){
     const cp=ch.codePointAt(0);
     if(uniMap && cp < uniMap.length){
       const tid=uniMap[cp];
       if(tid>=0) ids.push(tid);
-      // C++: kUnknownId=0 for out-of-range, but in-range -1 = unsupported char (skip)
     }
   }
   if(!ids.length){
@@ -324,7 +321,6 @@ function gaussianNoise(size){const a=new Float32Array(size);for(let i=0;i<size;i
 
 async function synthSupertonic(text,sid,steps,speed,lang){
   if(!stReady)throw new Error('엔진 미준비');
-  // C++: max_len = (lang == "ko" || lang == "ja") ? 120 : 300
   const maxLen=(lang==='ko'||lang==='ja')?120:300;
   const processedText=stripMd(text).slice(0,maxLen);
   const ids=textToIds(processedText, lang||'en');
@@ -347,7 +343,6 @@ async function synthSupertonic(text,sid,steps,speed,lang){
   const encOut=await stSess.textEnc.run({text_ids:tokT,style_ttl:sTtl,text_mask:maskT});
   const textEmb=encOut.text_emb;
 
-  // ★ FIX v4.2.10: current_step/total_step = float32 [bsz=1]
   let z=new ort.Tensor('float32',gaussianNoise(lCh*T),[1,lCh,T]);
   const totStepT  =new ort.Tensor('float32',new Float32Array([steps]),[1]);
   const latentMask=new ort.Tensor('float32',new Float32Array(T).fill(1.0),[1,1,T]);
@@ -404,7 +399,6 @@ function wsFallback(text,btnEl){
 
 function stripMd(t){return t.replace(/#{1,6}\s/g,'').replace(/\*\*([^*]+)\*\*/g,'$1').replace(/\*([^*]+)\*/g,'$1').replace(/`[^`]+`/g,'').replace(/\n+/g,' ').replace(/\[([^\]]+)\]\([^)]+\)/g,'$1').trim();}
 
-// ★ v4.2.11: 언어별 테스트 텍스트
 function getTestText(lang){
   const texts={
     ko:'안녕하세요. ASTERION 에너지 분석 시스템입니다.',
@@ -464,7 +458,7 @@ function connectNotifSSE(){
   if(sseConn){sseConn.close();sseConn=null;}
   const es=new EventSource('/api/notifications/stream');sseConn=es;
   es.onopen=()=>{document.getElementById('sse-dot').className='ok';};
-  es.onmessage=(e)=>{try{const d=JSON.parse(e.data);if(d.notifications!==undefined){pendingNotifs=d.notifications;updateBtrBadge();if(btrOpen)renderBtrCards();}}catch(_){}}; 
+  es.onmessage=(e)=>{try{const d=JSON.parse(e.data);if(d.notifications!==undefined){pendingNotifs=d.notifications;updateBtrBadge();if(btrOpen)renderBtrCards();}}catch(_){}};
   es.onerror=()=>{document.getElementById('sse-dot').className='err';};
 }
 async function checkStatus(){
@@ -534,7 +528,7 @@ function appendMsg(role,content,empty){
   const isU=role==='user',ms=MODEL_STYLE[S.model]||MODEL_STYLE.claude;
   const now=new Date().toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'});
   const row=document.createElement('div');row.className='row';
-  row.innerHTML='<div class="av '+(isU?'u':ms.avClass)+'">'+(isU?'U':ms.icon)+'</div><div class="mb2"><div class="meta"><span class="who '+(isU?'u':ms.whoClass)+'">'+(isU?'USER':ms.label)+'</span><span class="ts">'+now+'</span></div><div class="cnt '+(isU?'u':'')+'">'+(isU?esc(content).replace(/\n/g,'<br>'):(content?marked.parse(content):''))+'</div></div>';
+  row.innerHTML='<div class="av '+(isU?'u':ms.avClass)+'">'+(isU?'U':ms.icon)+'</div><div class="mb2"><div class="meta"><span class="who '+(isU?'u':ms.whoClass)+'">'+(isU?'USER':ms.label)+'</span><span class="ts">'+now+'</span></div><div class="cnt '+(isU?'u':'')+'\">'+(isU?esc(content).replace(/\n/g,'<br>'):(content?marked.parse(content):''))+'</div></div>';
   document.getElementById('msgs').appendChild(row);if(!empty){hljs.highlightAll();addCopyBtns();scrollBot();}return row;
 }
 function addCopyBtns(){document.querySelectorAll('.cnt pre:not([data-cp])').forEach(p=>{p.setAttribute('data-cp','1');p.style.position='relative';const b=document.createElement('button');b.className='cpbtn';b.textContent='COPY';b.onclick=()=>{navigator.clipboard?.writeText(p.querySelector('code')?.textContent||'');b.textContent='COPIED';setTimeout(()=>b.textContent='COPY',1500);};p.appendChild(b);});}
