@@ -5,12 +5,12 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
 <title>ASTERION Hub</title>
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
-<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;500&family=Noto+Sans+KR:wght@300;400;500&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"/>
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css"/>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/9.1.6/marked.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;500&family=Noto+Sans+KR:wght@300;400;500&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" crossorigin="anonymous"/>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css" crossorigin="anonymous"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/9.1.6/marked.min.js" crossorigin="anonymous"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js" crossorigin="anonymous"></script>
 <script>window.__ORT_CDN='https://cdn.jsdelivr.net/npm/onnxruntime-web@1.21.0/dist/';</script>
-<script src="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.21.0/dist/ort.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.21.0/dist/ort.min.js" crossorigin="anonymous"></script>
 <style>
 :root{--gold:#c9a96e;--gold-lt:#e8d5a3;--gold-a:rgba(201,169,110,.14);--gold-b:rgba(201,169,110,.07);--bg:#080604;--bg1:#0e0b07;--bg2:#161210;--bg3:#1e1a14;--bdr:rgba(201,169,110,.20);--bdr2:rgba(201,169,110,.09);--tx:#ddd0b8;--tx2:#a08c6e;--tx3:#6b5c44;--green:#5a8a6a;--red:#9a5040;--btr-c:rgba(180,100,50,.20);--btr-b:rgba(200,120,60,.35);--btr-tx:rgba(230,150,80,.95);}
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}html{-webkit-text-size-adjust:100%}
@@ -177,48 +177,37 @@ const STP={steps:5,speed:1.0,sid:0,lang:'en'};
 let pendingNotifs=[],btrOpen=false,sseConn=null;
 const MODEL_STYLE={claude:{avClass:'a-claude',whoClass:'claude',label:'CLAUDE',icon:'✦'},gemini:{avClass:'a-gemini',whoClass:'gemini',label:'GEMINI',icon:'◈'}};
 
-// ══ SUPERTONIC ENGINE v4.2.14 ══
+// ══ SUPERTONIC ENGINE v4.2.15 ══
 // v4.2.12: parseVoiceBin 블록 레이아웃 수정
 // v4.2.13: 청크 파이프라인 TTS
-// v4.2.14: GPU 가속 (WebGPU → WebGL → WASM 자동 감지)
-//   - detectBestEP(): navigator.gpu 확인 → WebGPU 우선
-//   - int8 모델 일부 ops는 CPU fallback (자동 처리)
-//   - 감지된 백엔드를 상태 메시지에 표시
+// v4.2.14: WebGPU/WebGL 시도 → int8 DequantizeLinear 미지원으로 크래시 확인
+// v4.2.15: WebGPU/WebGL 제거, WASM 최적화
+//   이유: int8 양자화 모델의 핵심 연산자(QLinearConv, DequantizeLinear 등)가
+//         WebGPU WGSL 셰이더로 컴파일 불가 → S24 Ultra에서 즉시 크래시
+//   해결: WASM + SIMD + 멀티스레딩
+//   서버: COOP(same-origin) + COEP(credentialless) 헤더 → SharedArrayBuffer 활성화
+//   스레드: navigator.hardwareConcurrency 기반 자동 설정 (최대 4)
 const TTS_DB_NAME='asterion-tts-v1',TTS_STORE='model-files';
 const REQUIRED=['duration_predictor.int8.onnx','text_encoder.int8.onnx','vector_estimator.int8.onnx','vocoder.int8.onnx','tts.json','unicode_indexer.bin','voice.bin'];
 let ttsDb=null,stReady=false,stLoading=false,stSess={},stConfig=null,uniMap=null,voiceData=null;
 let activeTtsStop=false,activeTtsCtx=null;
-let detectedEP='wasm'; // 감지된 실제 백엔드
+let detectedEP='WASM';
 
-// ★ v4.2.14: 최적 Execution Provider 자동 감지
-// WebGPU(모바일 GPU) > WebGL(OpenGL ES GPU) > WASM(CPU) 순서
-async function detectBestEP(){
-  // 1. WebGPU: Chrome 121+ Android, Safari 17+ iOS
-  if(typeof navigator !== 'undefined' && navigator.gpu){
-    try{
-      const adapter = await navigator.gpu.requestAdapter({powerPreference:'high-performance'});
-      if(adapter){
-        const info = adapter.info || {};
-        console.log('[TTS EP] WebGPU 사용 가능:', info.vendor||'', info.architecture||'');
-        return {providers:['webgpu','wasm'], name:'WebGPU 🚀'};
-      }
-    }catch(e){console.warn('[TTS EP] WebGPU 실패:', e.message);}
-  }
-  // 2. WebGL: 대부분의 모바일 브라우저 지원
-  try{
-    const canvas = document.createElement('canvas');
-    const gl = canvas.getContext('webgl2') || canvas.getContext('webgl');
-    if(gl){
-      const dbg = gl.getExtension('WEBGL_debug_renderer_info');
-      const renderer = dbg ? gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL) : 'unknown';
-      console.log('[TTS EP] WebGL 사용 가능:', renderer);
-      gl.getExtension('WEBGL_lose_context')?.loseContext();
-      return {providers:['webgl','wasm'], name:'WebGL 🎮'};
-    }
-  }catch(e){console.warn('[TTS EP] WebGL 실패:', e.message);}
-  // 3. WASM fallback
-  console.log('[TTS EP] WASM(CPU) 사용');
-  return {providers:['wasm'], name:'WASM(CPU)'};
+// ★ v4.2.15: WASM 최적화 전략
+// int8 양자화 모델 → CPU SIMD(AVX2/NEON)가 타깃 → GPU 전환 불필요
+// SharedArrayBuffer 가용 여부로 멀티스레딩 가능 여부 판단
+// COOP/COEP 헤더가 서버에서 전송되어야 SAB 사용 가능
+function detectWasmEP(){
+  const sab     = typeof SharedArrayBuffer !== 'undefined';
+  const cores   = navigator.hardwareConcurrency || 2;
+  // 고성능 코어의 절반 사용 (최대 4) — 메모리 대역폭 포화 방지
+  const threads = sab ? Math.min(4, Math.max(2, Math.floor(cores / 2))) : 1;
+  const label   = sab
+    ? `WASM·${threads}T·SIMD ⚡`
+    : `WASM·1T (SAB 미지원 — 서버 헤더 확인 필요)`;
+  console.log(`[TTS EP] ${label} | cores=${cores} SAB=${sab}`);
+  if(!sab) console.warn('[TTS] COOP/COEP 헤더 없음 → SharedArrayBuffer 차단됨 → 싱글스레드로 동작');
+  return { threads, name: label, sab };
 }
 
 async function openTtsDb(){if(ttsDb)return ttsDb;return new Promise((res,rej)=>{const r=indexedDB.open(TTS_DB_NAME,1);r.onupgradeneeded=e=>e.target.result.createObjectStore(TTS_STORE);r.onsuccess=e=>{ttsDb=e.target.result;res(ttsDb);};r.onerror=rej;});}
@@ -250,41 +239,43 @@ async function tryInitSupertonic(){
   if(!(await Promise.all(REQUIRED.map(n=>loadTtsFile(n)))).every(Boolean)){setStBadge('','파일 부족');return;}
   await initSupertonic();
 }
+
 async function initSupertonic(){
-  stLoading=true;setStBadge('loading','초기화 중...');showTtsProgress('GPU 백엔드 감지 중...');
+  stLoading=true;setStBadge('loading','초기화 중...');showTtsProgress('환경 확인 중...');
   try{
     if(typeof ort==='undefined')throw new Error('onnxruntime-web 미로드');
 
-    // ★ GPU EP 감지
-    const ep = await detectBestEP();
+    // ★ WASM 환경 감지 및 최적화
+    const ep = detectWasmEP();
     detectedEP = ep.name;
-    console.log('[TTS] 선택된 EP:', ep.name, ep.providers);
-    showTtsProgress('EP: '+ep.name+' — WASM 설정 중...');
 
-    ort.env.wasm.wasmPaths=window.__ORT_CDN;
-    ort.env.wasm.numThreads=2;
+    ort.env.wasm.wasmPaths = window.__ORT_CDN;
+    ort.env.wasm.numThreads = ep.threads;
+    // SIMD는 브라우저가 지원하면 ORT가 자동 활성화 (별도 설정 불필요)
 
-    // WebGPU 환경 설정
-    if(ep.providers[0]==='webgpu'){
-      // WebGPU 추가 설정 (선택적)
-      // ort.env.webgpu.profiling = false;
-    }
-
-    const opts = {executionProviders: ep.providers};
+    showTtsProgress('파일 로딩 중...');
     const files={};for(const n of REQUIRED){const b=await loadTtsFile(n);if(!b)throw new Error('누락: '+n);files[n]=b;}
     stConfig=parseTtsJson(new TextDecoder().decode(files['tts.json']));
     uniMap=new Int32Array(files['unicode_indexer.bin']);
     voiceData=parseVoiceBin(files['voice.bin'],stConfig);
+
     showTtsProgress('ONNX 세션 로딩 ['+ep.name+']...');
+
+    // ★ int8 모델 최적화 세션 옵션
+    const opts = {
+      executionProviders: ['wasm'],
+      graphOptimizationLevel: 'all',
+      enableCpuMemArena: true,
+      enableMemPattern: true,
+    };
 
     stSess.durPred =await ort.InferenceSession.create(files['duration_predictor.int8.onnx'],opts);
     stSess.textEnc =await ort.InferenceSession.create(files['text_encoder.int8.onnx'],opts);
     stSess.vecEst  =await ort.InferenceSession.create(files['vector_estimator.int8.onnx'],opts);
     stSess.vocoder =await ort.InferenceSession.create(files['vocoder.int8.onnx'],opts);
 
-    const names={durPred:{in:[...stSess.durPred.inputNames],out:[...stSess.durPred.outputNames]},textEnc:{in:[...stSess.textEnc.inputNames],out:[...stSess.textEnc.outputNames]},vecEst:{in:[...stSess.vecEst.inputNames],out:[...stSess.vecEst.outputNames]},vocoder:{in:[...stSess.vocoder.inputNames],out:[...stSess.vocoder.outputNames]}};
     const nmEl=document.getElementById('st-model-names');nmEl.style.display='block';
-    nmEl.textContent='EP: '+ep.name+'\ndurPred in:'+names.durPred.in.join(',')+' out:'+names.durPred.out.join(',')+'\ntextEnc  in:'+names.textEnc.in.join(',')+' out:'+names.textEnc.out.join(',')+'\nvecEst   in:'+names.vecEst.in.join(',')+' out:'+names.vecEst.out.join(',')+'\nvocoder  in:'+names.vocoder.in.join(',')+' out:'+names.vocoder.out.join(',');
+    nmEl.textContent='EP: '+ep.name+'\n'+(ep.sab?'✓ SharedArrayBuffer 활성 (멀티스레딩 가능)':'⚠ SharedArrayBuffer 미활성 — 싱글스레드')+'\ndurPred/textEnc/vecEst/vocoder: 로드 완료';
 
     stReady=true;setStBadge('ready','준비됨 ✓');
     document.getElementById('st-status-msg').textContent='Supertonic 3 준비 완료 ['+ep.name+']. 화자 '+voiceData.length+'명, '+stConfig.sample_rate+'Hz';
@@ -293,29 +284,8 @@ async function initSupertonic(){
     stReady=false;setStBadge('error','오류');
     document.getElementById('st-status-msg').textContent='오류: '+e.message;
     console.error('[TTS]',e);
-    // GPU 실패 시 WASM으로 재시도
-    if(e.message && !e.message.includes('누락') && detectedEP !== 'WASM(CPU)'){
-      console.log('[TTS] GPU 로딩 실패, WASM으로 재시도...');
-      toast('GPU 로딩 실패, CPU로 재시도 중...');
-      await retryWithWasm();
-    }
   }
   hideTtsProgress();stLoading=false;
-}
-
-// GPU 실패시 WASM 폴백
-async function retryWithWasm(){
-  try{
-    const opts={executionProviders:['wasm']};
-    const files={};for(const n of REQUIRED){const b=await loadTtsFile(n);if(!b)return;}
-    stSess.durPred =await ort.InferenceSession.create(files['duration_predictor.int8.onnx'],opts);
-    stSess.textEnc =await ort.InferenceSession.create(files['text_encoder.int8.onnx'],opts);
-    stSess.vecEst  =await ort.InferenceSession.create(files['vector_estimator.int8.onnx'],opts);
-    stSess.vocoder =await ort.InferenceSession.create(files['vocoder.int8.onnx'],opts);
-    detectedEP='WASM(CPU)';stReady=true;setStBadge('ready','준비됨 ✓');
-    document.getElementById('st-status-msg').textContent='Supertonic 3 준비 완료 [WASM]. 화자 '+voiceData.length+'명';
-    toast('TTS 준비 완료 (CPU 모드)');
-  }catch(e2){console.error('[TTS retryWasm]',e2);}
 }
 
 function parseTtsJson(text){
@@ -328,6 +298,7 @@ function parseTtsJson(text){
   return cfg;
 }
 
+// v4.2.12 FIX: C++ 실제 레이아웃 = [모든 화자 TTL 블록][모든 화자 DP 블록]
 function parseVoiceBin(buf,cfg){
   const view=new DataView(buf);
   const numSpk=view.getInt32(0,true),nTtl=view.getInt32(8,true),dTtl=view.getInt32(16,true),nDp=view.getInt32(32,true),dDp=view.getInt32(40,true);
@@ -341,6 +312,7 @@ function parseVoiceBin(buf,cfg){
   return speakers;
 }
 
+// v4.2.11: NFKD 정규화 + 언어 태그 래핑
 function textToIds(text,lang){
   let n=text.normalize('NFKD');
   if(lang&&lang!=='na') n='<'+lang+'>'+n+'</'+lang+'>';
@@ -394,6 +366,7 @@ async function playChunk(samples,sampleRate){
   }catch(e){}finally{try{ctx.close();}catch(_){}if(activeTtsCtx===ctx)activeTtsCtx=null;}
 }
 
+// v4.2.13: 문장 단위 청크 분할
 function splitTextChunks(text,lang){
   const maxLen=(lang==='ko'||lang==='ja')?40:120;
   const sentences=text.match(/[^.!?。！？\n]+[.!?。！？\n]?/g)||[text];
@@ -403,6 +376,7 @@ function splitTextChunks(text,lang){
   return chunks.filter(c=>c.length>0);
 }
 
+// v4.2.13: 파이프라인 TTS (청크N 재생 중 청크N+1 합성)
 async function speakText(text,btnEl){
   if(WS.activeBtn===btnEl){
     activeTtsStop=true;if(activeTtsCtx){try{activeTtsCtx.close();}catch(_){}}
@@ -448,7 +422,6 @@ function wsFallback(text,btnEl){
 }
 
 function stripMd(t){return t.replace(/#{1,6}\s/g,'').replace(/\*\*([^*]+)\*\*/g,'$1').replace(/\*([^*]+)\*/g,'$1').replace(/`[^`]+`/g,'').replace(/\n+/g,' ').replace(/\[([^\]]+)\]\([^)]+\)/g,'$1').trim();}
-
 function getTestText(lang){const texts={ko:'안녕하세요. ASTERION 에너지 분석 시스템입니다.',ja:'こんにちは。ASTERIONです。',en:'ASTERION energy analysis system. Hello world.',na:'ASTERION test.'};return texts[lang]||texts.en;}
 
 async function testTts(){
