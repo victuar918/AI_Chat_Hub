@@ -140,7 +140,7 @@ select{background:var(--bg2);border:1px solid var(--bdr);color:var(--tx2);border
       </select>
     </div>
     <div class="sp-row"><span class="sp-label">화자</span><select id="st-sid" onchange="saveTtsPref()"><option value="0">0</option><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="5">5</option><option value="6">6</option><option value="7">7</option><option value="8">8</option><option value="9">9</option></select></div>
-    <div class="sp-row"><span class="sp-label">품질(스텝)</span><input type="range" id="st-steps" min="2" max="10" step="1" value="5" oninput="updateStepsVal()"/><span class="sp-val" id="st-steps-val">5</span></div>
+    <div class="sp-row"><span class="sp-label">품질(스텝)</span><input type="range" id="st-steps" min="4" max="12" step="1" value="5" oninput="updateStepsVal()"/><span class="sp-val" id="st-steps-val">5</span></div>
     <div class="sp-row"><span class="sp-label">속도</span><input type="range" id="tts-speed" min="0.5" max="2.0" step="0.1" value="1.0" oninput="updateSpeedVal()"/><span class="sp-val" id="tts-speed-val">1.0x</span></div>
     <div class="sp-row" style="gap:8px"><button class="sp-btn" id="st-test-btn" onclick="testTts()">▶ 테스트 재생</button><button class="sp-btn danger" onclick="clearTtsModel()">🗑 초기화</button></div>
     <div class="sp-info" style="margin-top:6px">다운로드: <a href="https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/sherpa-onnx-supertonic-3-tts-int8-2026-05-11.tar.bz2" target="_blank">sherpa-onnx-supertonic-3-int8</a></div>
@@ -177,15 +177,17 @@ const STP={steps:5,speed:1.0,sid:0,lang:'en'};
 let pendingNotifs=[],btrOpen=false,sseConn=null;
 const MODEL_STYLE={claude:{avClass:'a-claude',whoClass:'claude',label:'CLAUDE',icon:'✦'},gemini:{avClass:'a-gemini',whoClass:'gemini',label:'GEMINI',icon:'◈'}};
 
-// ══ SUPERTONIC ENGINE v4.2.12 ══
-// v4.2.11: NFKD 한국어 처리 + 언어 태그 래핑
-// v4.2.12: ★ FIX voice.bin 파싱 버그
-//   - 기존(오류): 화자별 TTL→DP 교차 읽기 → 화자 0만 TTL 우연히 맞음
-//   - C++ 실제:  [모든 화자 TTL 블록][모든 화자 DP 블록]
-//   - TTL_START=48, DP_START=48+numSpk*ttlLen*4
+// ══ SUPERTONIC ENGINE v4.2.13 ══
+// v4.2.12: parseVoiceBin 블록 레이아웃 수정
+// v4.2.13: 청크 파이프라인 TTS (문장 단위 분할 → 합성/재생 병렬 파이프라인)
+//   - 품질 최소값 4로 상향 (이하 왜곡 발생)
+//   - splitTextChunks(): 문장 경계 기준 분할
+//   - speakText(): 청크N 재생 중 청크N+1 합성 동시 진행
+//   - activeTtsStop 플래그 + AudioContext close()로 중단 지원
 const TTS_DB_NAME='asterion-tts-v1',TTS_STORE='model-files';
 const REQUIRED=['duration_predictor.int8.onnx','text_encoder.int8.onnx','vector_estimator.int8.onnx','vocoder.int8.onnx','tts.json','unicode_indexer.bin','voice.bin'];
 let ttsDb=null,stReady=false,stLoading=false,stSess={},stConfig=null,uniMap=null,voiceData=null;
+let activeTtsStop=false,activeTtsCtx=null;
 
 async function openTtsDb(){if(ttsDb)return ttsDb;return new Promise((res,rej)=>{const r=indexedDB.open(TTS_DB_NAME,1);r.onupgradeneeded=e=>e.target.result.createObjectStore(TTS_STORE);r.onsuccess=e=>{ttsDb=e.target.result;res(ttsDb);};r.onerror=rej;});}
 async function saveTtsFile(n,b){const db=await openTtsDb();return new Promise((res,rej)=>{const tx=db.transaction(TTS_STORE,'readwrite');tx.objectStore(TTS_STORE).put(b,n);tx.oncomplete=()=>res(true);tx.onerror=rej;});}
@@ -257,17 +259,10 @@ function parseTtsJson(text){
   };
   cfg.latent_channels=cfg.latent_dim*cfg.chunk_compress_factor;
   cfg.hop_samples    =cfg.base_chunk_size*cfg.chunk_compress_factor;
-  console.log('[TTS] config:',JSON.stringify(cfg));
   return cfg;
 }
 
-// ★ FIX v4.2.12: C++ 실제 레이아웃 = [모든 화자 TTL 블록] + [모든 화자 DP 블록]
-// C++ offline-tts-supertonic-impl.cc:
-//   memcpy(ttl_data, buf+48, numSpk*ttlLen*4)           ← 모든 화자 TTL 먼저
-//   memcpy(dp_data,  buf+48+numSpk*ttlLen*4, ...)       ← 그 다음 모든 화자 DP
-// 기존(v4.2.11 이하) 오류: 화자별 TTL→DP 교차 읽기
-//   화자 0: TTL=offset 48 (우연히 맞음), DP=51248 (오류)
-//   화자 1+: TTL/DP 모두 오류 → 왜곡
+// v4.2.12 FIX: C++ 실제 레이아웃 = [모든 화자 TTL 블록][모든 화자 DP 블록]
 function parseVoiceBin(buf,cfg){
   const view=new DataView(buf);
   const numSpk=view.getInt32(0, true);
@@ -278,8 +273,7 @@ function parseVoiceBin(buf,cfg){
   const ttlLen=nTtl*dTtl, dpLen=nDp*dDp;
   const TTL_START=48;
   const DP_START =48+numSpk*ttlLen*4;
-  console.log('[TTS v4.2.12] numSpk='+numSpk+' n_ttl='+nTtl+' d_ttl='+dTtl+' n_dp='+nDp+' d_dp='+dDp);
-  console.log('[TTS v4.2.12] TTL_START='+TTL_START+' DP_START='+DP_START+' fileSize='+buf.byteLength);
+  console.log('[TTS v4.2.12] numSpk='+numSpk+' TTL_START='+TTL_START+' DP_START='+DP_START+' fileSize='+buf.byteLength);
   const speakers=[];
   for(let s=0;s<numSpk;s++){
     const tOff=TTL_START+s*ttlLen*4;
@@ -295,25 +289,16 @@ function parseVoiceBin(buf,cfg){
   return speakers;
 }
 
-// v4.2.11: NFKD 정규화 + 언어 태그 래핑 (C++ PreprocessText 동일)
+// v4.2.11: NFKD 정규화 + 언어 태그 래핑
 function textToIds(text, lang){
   let normalized = text.normalize('NFKD');
-  if(lang && lang !== 'na'){
-    normalized = '<'+lang+'>'+normalized+'</'+lang+'>';
-  }
+  if(lang && lang !== 'na') normalized = '<'+lang+'>'+normalized+'</'+lang+'>';
   const ids=[];
   for(const ch of normalized){
     const cp=ch.codePointAt(0);
-    if(uniMap && cp < uniMap.length){
-      const tid=uniMap[cp];
-      if(tid>=0) ids.push(tid);
-    }
+    if(uniMap && cp < uniMap.length){const tid=uniMap[cp];if(tid>=0) ids.push(tid);}
   }
-  if(!ids.length){
-    console.warn('[TTS] 매핑된 토큰 없음, 폴백');
-    for(const ch of text.slice(0,5)) ids.push(ch.codePointAt(0)%256);
-  }
-  console.log('[TTS] textToIds lang='+lang+' tokens='+ids.length);
+  if(!ids.length){for(const ch of text.slice(0,5)) ids.push(ch.codePointAt(0)%256);}
   return ids;
 }
 
@@ -322,69 +307,153 @@ function gaussianNoise(size){const a=new Float32Array(size);for(let i=0;i<size;i
 async function synthSupertonic(text,sid,steps,speed,lang){
   if(!stReady)throw new Error('엔진 미준비');
   const maxLen=(lang==='ko'||lang==='ja')?120:300;
-  const processedText=stripMd(text).slice(0,maxLen);
-  const ids=textToIds(processedText, lang||'en');
+  const ids=textToIds(text.slice(0,maxLen), lang||'en');
   const seqLen=ids.length;if(!seqLen)throw new Error('입력 없음');
   const spk=voiceData[Math.min(sid,voiceData.length-1)];
   const tokT =new ort.Tensor('int64',BigInt64Array.from(ids.map(BigInt)),[1,seqLen]);
   const maskT=new ort.Tensor('float32',new Float32Array(seqLen).fill(1.0),[1,1,seqLen]);
   const sTtl =new ort.Tensor('float32',spk.style_ttl,spk.dims_ttl);
   const sDp  =new ort.Tensor('float32',spk.style_dp, spk.dims_dp);
-
-  showTtsProgress('1/4 Duration...');
   const durOut=await stSess.durPred.run({text_ids:tokT,style_dp:sDp,text_mask:maskT});
   const durSecs=Array.from(durOut.duration?.data||[1.0])[0];
   const adjDur=Math.max(0.1,durSecs/(speed||1.0));
   const sr=stConfig.sample_rate, hop=stConfig.hop_samples, lCh=stConfig.latent_channels;
   const T=Math.max(1,Math.ceil(adjDur*sr/hop));
-  console.log('[TTS] dur='+durSecs.toFixed(2)+'s T='+T+' lCh='+lCh+' lang='+lang);
-
-  showTtsProgress('2/4 Encoding...');
   const encOut=await stSess.textEnc.run({text_ids:tokT,style_ttl:sTtl,text_mask:maskT});
   const textEmb=encOut.text_emb;
-
   let z=new ort.Tensor('float32',gaussianNoise(lCh*T),[1,lCh,T]);
   const totStepT  =new ort.Tensor('float32',new Float32Array([steps]),[1]);
   const latentMask=new ort.Tensor('float32',new Float32Array(T).fill(1.0),[1,1,T]);
   for(let step=0;step<steps;step++){
-    showTtsProgress('3/4 Denoising '+(step+1)+'/'+steps+'...');
     const curStepT=new ort.Tensor('float32',new Float32Array([step]),[1]);
-    const veOut=await stSess.vecEst.run({
-      noisy_latent: z,
-      text_emb:     textEmb,
-      style_ttl:    sTtl,
-      latent_mask:  latentMask,
-      text_mask:    maskT,
-      current_step: curStepT,
-      total_step:   totStepT,
-    });
+    const veOut=await stSess.vecEst.run({noisy_latent:z,text_emb:textEmb,style_ttl:sTtl,latent_mask:latentMask,text_mask:maskT,current_step:curStepT,total_step:totStepT});
     z=veOut.denoised_latent;
-    console.log('[TTS] step'+step+' z:',z?.dims?.join('x'));
   }
-
-  showTtsProgress('4/4 Vocoder...');
   const vocOut=await stSess.vocoder.run({latent:z});
   const audio=vocOut.wav_tts;
-  console.log('[TTS] wav_tts:',audio?.dims?.join('x'),audio?.data?.length,'samples');
-  hideTtsProgress();
   return{samples:Float32Array.from(audio.data),sampleRate:sr};
 }
 
 function float32ToWav(s,sr){const l=s.length,b=new ArrayBuffer(44+l*2),v=new DataView(b),w4=(o,x)=>v.setUint32(o,x,true),w2=(o,x)=>v.setUint16(o,x,true);[82,73,70,70].forEach((x,i)=>v.setUint8(i,x));w4(4,36+l*2);[87,65,86,69].forEach((x,i)=>v.setUint8(8+i,x));[102,109,116,32].forEach((x,i)=>v.setUint8(12+i,x));w4(16,16);w2(20,1);w2(22,1);w4(24,sr);w4(28,sr*2);w2(32,2);w2(34,16);[100,97,116,97].forEach((x,i)=>v.setUint8(36+i,x));w4(40,l*2);for(let i=0;i<l;i++){const x=Math.max(-1,Math.min(1,s[i]));v.setInt16(44+i*2,x<0?x*32768:x*32767,true);}return b;}
 
-async function playWavBuffer(wb){const ctx=new AudioContext(),ab=await ctx.decodeAudioData(wb.slice(0)),src=ctx.createBufferSource();src.buffer=ab;src.connect(ctx.destination);src.start();return new Promise(res=>{src.onended=()=>{ctx.close();res();};});}
-
-async function speakText(text,btnEl){
-  const synth=window.speechSynthesis;
-  if(synth?.speaking&&WS.activeBtn===btnEl){synth.cancel();btnEl.innerHTML='▶ 재생';btnEl.classList.remove('playing');WS.activeBtn=null;return;}
-  if(synth?.speaking){synth.cancel();if(WS.activeBtn){WS.activeBtn.innerHTML='▶ 재생';WS.activeBtn.classList.remove('playing');}}
-  if(stReady){
-    btnEl.innerHTML='⏸ 정지';btnEl.classList.add('playing');WS.activeBtn=btnEl;
-    try{const{samples,sampleRate}=await synthSupertonic(text,STP.sid,STP.steps,STP.speed,STP.lang);await playWavBuffer(float32ToWav(samples,sampleRate));}
-    catch(e){const msg=String(e?.message||e);console.error('[TTS 오류]',msg);document.getElementById('st-status-msg').textContent='오류: '+msg;toast(msg.slice(0,80),8000);wsFallback(text,btnEl);return;}
-    btnEl.innerHTML='▶ 재생';btnEl.classList.remove('playing');WS.activeBtn=null;return;
+// ★ v4.2.13: 문장 단위 청크 분할
+// 언어에 따라 최대 청크 길이 조정:
+//   ko/ja: 40자 (짧은 문장 단위)
+//   기타: 120자
+function splitTextChunks(text, lang){
+  const maxLen = (lang==='ko'||lang==='ja') ? 40 : 120;
+  // 문장 경계: . ! ? 。！？ 및 줄바꿈
+  const re = /[^.!?。！？\n]+[.!?。！？\n]?/g;
+  const sentences = text.match(re) || [text];
+  const chunks = [];
+  let cur = '';
+  for(const s of sentences){
+    if(cur.length + s.length > maxLen && cur.length > 0){
+      if(cur.trim()) chunks.push(cur.trim());
+      cur = s;
+    } else {
+      cur += s;
+    }
   }
-  wsFallback(text,btnEl);
+  if(cur.trim()) chunks.push(cur.trim());
+  return chunks.filter(c => c.length > 0);
+}
+
+// ★ v4.2.13: 청크 단위 AudioContext 재생 (중단 지원)
+async function playChunk(samples, sampleRate){
+  if(activeTtsStop) return;
+  const ctx = new AudioContext();
+  activeTtsCtx = ctx;
+  try{
+    const ab = await ctx.decodeAudioData(float32ToWav(samples, sampleRate).slice(0));
+    if(activeTtsStop){ctx.close();return;}
+    const src = ctx.createBufferSource();
+    src.buffer = ab;
+    src.connect(ctx.destination);
+    src.start();
+    await new Promise(res => {src.onended = res;});
+  }catch(e){
+    // AudioContext 닫힘(중단) 시 정상
+  }finally{
+    try{ctx.close();}catch(_){}
+    if(activeTtsCtx === ctx) activeTtsCtx = null;
+  }
+}
+
+// ★ v4.2.13 핵심: 파이프라인 TTS
+// 청크 N 재생 중 청크 N+1 합성 동시 진행 → 대기시간 최소화
+async function speakText(text, btnEl){
+  // 재생 중이면 중단
+  if(WS.activeBtn === btnEl){
+    activeTtsStop = true;
+    if(activeTtsCtx){try{activeTtsCtx.close();}catch(_){}}
+    activeTtsCtx = null;
+    WS.activeBtn = null;
+    btnEl.innerHTML = '▶ 재생';
+    btnEl.classList.remove('playing');
+    if(window.speechSynthesis) window.speechSynthesis.cancel();
+    return;
+  }
+  // 다른 재생 중단
+  if(WS.activeBtn){
+    activeTtsStop = true;
+    if(activeTtsCtx){try{activeTtsCtx.close();}catch(_){}}
+    activeTtsCtx = null;
+    WS.activeBtn.innerHTML = '▶ 재생';
+    WS.activeBtn.classList.remove('playing');
+    if(window.speechSynthesis) window.speechSynthesis.cancel();
+    WS.activeBtn = null;
+    await new Promise(r => setTimeout(r, 100));
+  }
+
+  if(!stReady){wsFallback(text, btnEl);return;}
+
+  activeTtsStop = false;
+  btnEl.innerHTML = '⏸ 정지';
+  btnEl.classList.add('playing');
+  WS.activeBtn = btnEl;
+
+  const chunks = splitTextChunks(stripMd(text), STP.lang);
+  console.log('[TTS pipeline] 청크 수:', chunks.length, chunks);
+
+  if(chunks.length === 0){resetBtn(btnEl);return;}
+
+  try{
+    // 첫 청크 합성 시작
+    let nextSynth = synthSupertonic(chunks[0], STP.sid, STP.steps, STP.speed, STP.lang);
+
+    for(let i = 0; i < chunks.length; i++){
+      if(activeTtsStop) break;
+
+      showTtsProgress('청크 '+(i+1)+'/'+chunks.length+' 합성/재생 중...');
+
+      // 현재 청크 합성 완료 대기
+      const wav = await nextSynth;
+      if(activeTtsStop) break;
+
+      // 다음 청크 합성 미리 시작 (현재 청크 재생과 동시)
+      if(i + 1 < chunks.length && !activeTtsStop){
+        nextSynth = synthSupertonic(chunks[i+1], STP.sid, STP.steps, STP.speed, STP.lang);
+      }
+
+      // 현재 청크 재생
+      await playChunk(wav.samples, wav.sampleRate);
+    }
+  }catch(e){
+    if(!activeTtsStop){
+      console.error('[TTS pipeline]', e);
+      document.getElementById('st-status-msg').textContent = '오류: '+e.message;
+      toast(String(e.message||e).slice(0,80), 6000);
+    }
+  }
+
+  hideTtsProgress();
+  if(!activeTtsStop) resetBtn(btnEl);
+}
+
+function resetBtn(btnEl){
+  if(btnEl){btnEl.innerHTML='▶ 재생';btnEl.classList.remove('playing');}
+  if(WS.activeBtn===btnEl) WS.activeBtn=null;
 }
 
 function wsFallback(text,btnEl){
@@ -393,42 +462,33 @@ function wsFallback(text,btnEl){
   utt.lang=STP.lang==='ko'?'ko-KR':STP.lang==='ja'?'ja-JP':'en-US';
   utt.rate=WS.rate;utt.pitch=WS.pitch;
   WS.activeBtn=btnEl;btnEl.innerHTML='⏸ 정지';btnEl.classList.add('playing');
-  utt.onend=utt.onerror=()=>{btnEl.innerHTML='▶ 재생';btnEl.classList.remove('playing');WS.activeBtn=null;};
+  utt.onend=utt.onerror=()=>{resetBtn(btnEl);};
   synth.speak(utt);
 }
 
 function stripMd(t){return t.replace(/#{1,6}\s/g,'').replace(/\*\*([^*]+)\*\*/g,'$1').replace(/\*([^*]+)\*/g,'$1').replace(/`[^`]+`/g,'').replace(/\n+/g,' ').replace(/\[([^\]]+)\]\([^)]+\)/g,'$1').trim();}
 
 function getTestText(lang){
-  const texts={
-    ko:'안녕하세요. ASTERION 에너지 분석 시스템입니다.',
-    ja:'こんにちは。ASTERIONエネルギー分析システムです。',
-    en:'ASTERION energy analysis system. Hello world.',
-    na:'ASTERION energy analysis system test.',
-  };
+  const texts={ko:'안녕하세요. ASTERION 에너지 분석 시스템입니다. 반갑습니다.',ja:'こんにちは。ASTERIONエネルギー分析システムです。',en:'ASTERION energy analysis system. Hello world. Testing pipeline TTS.',na:'ASTERION energy analysis system test.'};
   return texts[lang]||texts.en;
 }
 
 async function testTts(){
   const btn=document.getElementById('st-test-btn');
-  const testText=getTestText(STP.lang);
   if(stReady){
-    btn.textContent='⏸ 정지';btn.classList.add('playing');WS.activeBtn=btn;
-    try{const{samples,sampleRate}=await synthSupertonic(testText,STP.sid,STP.steps,STP.speed,STP.lang);await playWavBuffer(float32ToWav(samples,sampleRate));}
-    catch(e){const msg=String(e?.message||e);document.getElementById('st-status-msg').textContent='오류: '+msg;toast(msg.slice(0,80),8000);console.error('[TTS]',e);}
-    btn.textContent='▶ 테스트 재생';btn.classList.remove('playing');WS.activeBtn=null;
+    await speakText(getTestText(STP.lang), btn);
   }else{toast('모델 미설치 — Web Speech로 재생');testWsSpeech();}
 }
 
 function testWsSpeech(){
   const btn=document.getElementById('ws-test-btn'),synth=window.speechSynthesis;if(!synth){toast('TTS 미지원');return;}
-  if(synth.speaking&&WS.activeBtn===btn){synth.cancel();btn.textContent='▶ 테스트 재생';btn.classList.remove('playing');WS.activeBtn=null;return;}
-  if(synth.speaking){synth.cancel();if(WS.activeBtn){WS.activeBtn.textContent='▶ 테스트 재생';WS.activeBtn.classList.remove('playing');}}
+  if(synth.speaking&&WS.activeBtn===btn){synth.cancel();resetBtn(btn);return;}
+  if(synth.speaking){synth.cancel();if(WS.activeBtn)resetBtn(WS.activeBtn);}
   const utt=new SpeechSynthesisUtterance(getTestText(STP.lang));
   utt.lang=STP.lang==='ko'?'ko-KR':STP.lang==='ja'?'ja-JP':'en-US';
   utt.rate=WS.rate;utt.pitch=WS.pitch;
   WS.activeBtn=btn;btn.textContent='⏸ 정지';btn.classList.add('playing');
-  utt.onend=utt.onerror=()=>{btn.textContent='▶ 테스트 재생';btn.classList.remove('playing');WS.activeBtn=null;};
+  utt.onend=utt.onerror=()=>{resetBtn(btn);};
   synth.speak(utt);
 }
 
