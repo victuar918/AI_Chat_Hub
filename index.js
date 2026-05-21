@@ -1,5 +1,6 @@
 /**
- * ASTERION Hub — Chat Backend v3.4
+ * ASTERION Hub — Chat Backend v3.5
+ * - COOP/COEP 헤더 추가 → SharedArrayBuffer 활성화 → WASM 멀티스레딩 가능
  * - 알림: Short Polling → Server-Sent Events (SSE) 방식으로 전환
  *   백엔드가 5초마다 시트를 체크, 변경 시 연결된 모든 클라이언트에 브로드캐스트
  * - 클라이언트는 EventSource 하나만 유지 (모바일 배터리 절약)
@@ -22,6 +23,17 @@ const app = express();
 app.use(cors());
 app.use(express.json({ limit: '50mb' }));
 app.set('trust proxy', true);
+
+// ★ v3.5: COOP/COEP 헤더 — SharedArrayBuffer 활성화 → WASM 멀티스레딩
+// Cross-Origin-Embedder-Policy: credentialless
+//   require-corp 대신 credentialless 사용 → CDN 리소스(폰트/스크립트) CORP 헤더 불필요
+//   Chrome 96+, Samsung Internet 17+ 지원
+app.use((_req, res, next) => {
+  res.setHeader('Cross-Origin-Opener-Policy', 'same-origin');
+  res.setHeader('Cross-Origin-Embedder-Policy', 'credentialless');
+  next();
+});
+
 app.use(express.static(join(__dirname, 'static')));
 app.get('/', (_req, res) => res.sendFile(join(__dirname, 'static', 'index.html')));
 
@@ -56,21 +68,7 @@ async function getGCPToken() {
 // ────────────────────────────────────────────────────────────
 // Drive KB
 // ────────────────────────────────────────────────────────────
-const ASTERION_BASE = `너는 ASTERION의 내부 전용 AI다. ASTERION은 베딕 점성술(Lahiri 아야남샤)과 명리학을 결합한 에너지 공학 기반 분석 엔진이다. BTR(Birth Time Rectification)을 통해 개인 표준시를 확정하고, S-Class(97점↑ Hard Stop) 달성 이후에만 분석 결과물이 생성된다. asterion-mcp의 모든 도구를 자유롭게 사용한다.
-
-[운영 중인 시스템]
-- Archive GAS     : StructureCode 관리, PDF 생성, ExpireDate 기반 개인정보 삭제
-- 3자 루브릭      : Claude × Gemini × GPT, Hard Stop = 세 AI 97점↑ AND critical_issues 없음
-- ASTERION Flow   : BTR Result Code 기반 구독 분석 (Annual/Monthly/Weekly)
-- asterion-mcp    : L0~L6 단일 MCP 서버 (74개 도구), Cloud Run 배포
-
-[핵심 스프레드시트 ID]
-- Archive:        1ym1cgr1apEyTlqtJXqrfdnLjoyJTh086CjGycMcUOS8
-- JuliarCalendar: 1whKvFyWmb-qbR6OJt5dcI6WOJMLB5MUIzNMlJBFeq_g
-
-[중요] 도구 목록을 언급할 때는 반드시 아래 [실제 연결된 MCP 도구] 섹션의 도구 이름만 사용한다. 존재하지 않는 도구를 절대 만들어내지 않는다.
-
-외부 요청에 정확성과 무결성을 최우선으로 하고, 확신하지 못하는 부분은 솔직하게 표현한다.`;
+const ASTERION_BASE = `너는 ASTERION의 내부 전용 AI다. ASTERION은 베딕 점성술(Lahiri 아야남샤)과 명리학을 결합한 에너지 공학 기반 분석 엔진이다. BTR(Birth Time Rectification)을 통해 개인 표준시를 확정하고, S-Class(97점↑ Hard Stop) 달성 이후에만 분석 결과물이 생성된다. asterion-mcp의 모든 도구를 자유롭게 사용한다.\n\n[운영 중인 시스템]\n- Archive GAS     : StructureCode 관리, PDF 생성, ExpireDate 기반 개인정보 삭제\n- 3자 루브릭      : Claude × Gemini × GPT, Hard Stop = 세 AI 97점↑ AND critical_issues 없음\n- ASTERION Flow   : BTR Result Code 기반 구독 분석 (Annual/Monthly/Weekly)\n- asterion-mcp    : L0~L6 단일 MCP 서버 (74개 도구), Cloud Run 배포\n\n[핵심 스프레드시트 ID]\n- Archive:        1ym1cgr1apEyTlqtJXqrfdnLjoyJTh086CjGycMcUOS8\n- JuliarCalendar: 1whKvFyWmb-qbR6OJt5dcI6WOJMLB5MUIzNMlJBFeq_g\n\n[중요] 도구 목록을 언급할 때는 반드시 아래 [실제 연결된 MCP 도구] 섹션의 도구 이름만 사용한다. 존재하지 않는 도구를 절대 만들어내지 않는다.\n\n외부 요청에 정확성과 무결성을 최우선으로 하고, 확신하지 못하는 부분은 솔직하게 표현한다.`;
 
 let knowledgeContext = '', knowledgeStatus = 'not_loaded';
 
@@ -181,8 +179,7 @@ async function updateNotifStatus(id, status) {
 }
 
 // ────────────────────────────────────────────────────────────
-// SSE 브로드캐스터 — 서버가 5초마다 시트를 체크, 변경 시 전송
-// (클라이언트는 EventSource 하나만 유지 → 배터리/네트워크 절약)
+// SSE 브로드캐스터
 // ────────────────────────────────────────────────────────────
 const notifClients  = new Set();
 let   lastNotifHash = '';
@@ -204,7 +201,7 @@ async function notifBackgroundPoll() {
       console.log(`[Notif] 변경 감지 → ${notifs.length}건 브로드캐스트`);
     }
   } catch(_) {}
-  setTimeout(notifBackgroundPoll, 5000);   // 5초마다 체크
+  setTimeout(notifBackgroundPoll, 5000);
 }
 notifBackgroundPoll();
 
@@ -386,13 +383,11 @@ app.post('/api/chat', async (req, res) => {
   writeDone(res); res.end();
 });
 
-// ★ 알림 SSE 스트림 (클라이언트는 EventSource로 연결, 서버가 변경 시에만 전송)
 app.get('/api/notifications/stream', (req, res) => {
   res.setHeader('Content-Type',  'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
   res.setHeader('Connection',    'keep-alive');
   res.setHeader('X-Accel-Buffering', 'no');
-  // 연결 즉시 현재 알림 목록 전송
   fetchBTRNotifications().then(notifs => {
     res.write(`data: ${JSON.stringify({ notifications: notifs })}\n\n`);
     lastNotifHash = notifs.map(n => n.id).sort().join(',');
@@ -402,7 +397,6 @@ app.get('/api/notifications/stream', (req, res) => {
   console.log(`[NotifSSE] 클라이언트 연결 (총 ${notifClients.size}개)`);
 });
 
-// 폴백: 일회성 GET (EventSource 미지원 환경용)
 app.get('/api/notifications', async (_req, res) => {
   res.json({ notifications: await fetchBTRNotifications() });
 });
@@ -410,7 +404,6 @@ app.get('/api/notifications', async (_req, res) => {
 app.post('/api/notifications/:id/respond', async (req, res) => {
   const ok = await updateNotifStatus(req.params.id, 'responded');
   if (ok) {
-    // 즉시 브로드캐스트 트리거
     const notifs = await fetchBTRNotifications();
     lastNotifHash = notifs.map(n => n.id).sort().join(',');
     sendToAll({ notifications: notifs });
@@ -451,8 +444,8 @@ app.post('/api/reconnect-mcp', async (_req, res) => {
 
 // ────────────────────────────────────────────────────────────
 app.listen(PORT, '0.0.0.0', () => {
-  console.log(`🔱 ASTERION Hub v3.4 — port ${PORT}`);
-  console.log(`   알림: SSE 브로드캐스트 방식 (5초 서버 체크 → 변경 시에만 전송)`);
+  console.log(`🔱 ASTERION Hub v3.5 — port ${PORT}`);
+  console.log(`   COOP/COEP: same-origin / credentialless → SharedArrayBuffer 활성화`);
   console.log(`   Claude : ${CLAUDE_MODEL} | Native MCP ${CLAUDE_KEY?'✓':'✗'}`);
   console.log(`   Gemini : ${GEMINI_MODEL} | Function Calling ${GEMINI_KEY?'✓':'✗'}`);
   console.log(`   MCP    : ${MCP_SERVER_URL||'미설정'} | tools:${mcpTools.length}`);
