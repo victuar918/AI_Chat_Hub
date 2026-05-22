@@ -1,9 +1,7 @@
 /**
- * ASTERION Hub — Chat Backend v3.5
- * - COOP/COEP 헤더 추가 → SharedArrayBuffer 활성화 → WASM 멀티스레딩 가능
- * - 알림: Short Polling → Server-Sent Events (SSE) 방식으로 전환
- *   백엔드가 5초마다 시트를 체크, 변경 시 연결된 모든 클라이언트에 브로드캐스트
- * - 클라이언트는 EventSource 하나만 유지 (모바일 배터리 절약)
+ * ASTERION Hub — Chat Backend v3.6
+ * v3.6: L1/L3 도구 목록 업데이트 (btr_write_notification, btr_finalize_*, init_btr_sheets, gh_push_files)
+ * v3.5: COOP/COEP 헤더 → SharedArrayBuffer + SSE 알림 시스템
  */
 
 import express    from 'express';
@@ -24,10 +22,7 @@ app.use(cors());
 app.use(express.json({ limit: '50mb' }));
 app.set('trust proxy', true);
 
-// ★ v3.5: COOP/COEP 헤더 — SharedArrayBuffer 활성화 → WASM 멀티스레딩
-// Cross-Origin-Embedder-Policy: credentialless
-//   require-corp 대신 credentialless 사용 → CDN 리소스(폰트/스크립트) CORP 헤더 불필요
-//   Chrome 96+, Samsung Internet 17+ 지원
+// ★ COOP/COEP 헤더 — SharedArrayBuffer 활성화 → WASM 멀티스레딩
 app.use((_req, res, next) => {
   res.setHeader('Cross-Origin-Opener-Policy', 'same-origin');
   res.setHeader('Cross-Origin-Embedder-Policy', 'credentialless');
@@ -46,29 +41,26 @@ const GEMINI_MODEL    = 'gemini-3.1-pro-preview';
 const GPT_MODEL       = 'gpt-5.5';
 const DRIVE_FOLDER_ID = process.env.ASTERION_KNOWLEDGE_FOLDER_ID || '';
 const MCP_SERVER_URL  = process.env.MCP_SERVER_URL  || '';
-const BTR_SERVER_URL  = process.env.BTR_SERVER_URL  || '';
 const MCP_SECRET_KEY  = process.env.MCP_SECRET_KEY  || '';
 const ARCHIVE_SS_ID   = '1ym1cgr1apEyTlqtJXqrfdnLjoyJTh086CjGycMcUOS8';
 const NOTIF_SHEET     = 'BTRNotifications';
 const MAX_MSG_PAIRS   = 20;
 const MAX_TOOL_DEPTH  = 8;
 
-// ────────────────────────────────────────────────────────────
-// GCP ADC 토큰
-// ────────────────────────────────────────────────────────────
+// ── GCP ADC 토큰 ──────────────────────────────────────────
 async function getGCPToken() {
   try {
-    const r = await fetch('http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token',
-      { headers: {'Metadata-Flavor':'Google'} });
+    const r = await fetch(
+      'http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token',
+      { headers: {'Metadata-Flavor':'Google'} }
+    );
     if (!r.ok) return null;
     return (await r.json()).access_token;
   } catch { return null; }
 }
 
-// ────────────────────────────────────────────────────────────
-// Drive KB
-// ────────────────────────────────────────────────────────────
-const ASTERION_BASE = `너는 ASTERION의 내부 전용 AI다. ASTERION은 베딕 점성술(Lahiri 아야남샤)과 명리학을 결합한 에너지 공학 기반 분석 엔진이다. BTR(Birth Time Rectification)을 통해 개인 표준시를 확정하고, S-Class(97점↑ Hard Stop) 달성 이후에만 분석 결과물이 생성된다. asterion-mcp의 모든 도구를 자유롭게 사용한다.\n\n[운영 중인 시스템]\n- Archive GAS     : StructureCode 관리, PDF 생성, ExpireDate 기반 개인정보 삭제\n- 3자 루브릭      : Claude × Gemini × GPT, Hard Stop = 세 AI 97점↑ AND critical_issues 없음\n- ASTERION Flow   : BTR Result Code 기반 구독 분석 (Annual/Monthly/Weekly)\n- asterion-mcp    : L0~L6 단일 MCP 서버 (74개 도구), Cloud Run 배포\n\n[핵심 스프레드시트 ID]\n- Archive:        1ym1cgr1apEyTlqtJXqrfdnLjoyJTh086CjGycMcUOS8\n- JuliarCalendar: 1whKvFyWmb-qbR6OJt5dcI6WOJMLB5MUIzNMlJBFeq_g\n\n[중요] 도구 목록을 언급할 때는 반드시 아래 [실제 연결된 MCP 도구] 섹션의 도구 이름만 사용한다. 존재하지 않는 도구를 절대 만들어내지 않는다.\n\n외부 요청에 정확성과 무결성을 최우선으로 하고, 확신하지 못하는 부분은 솔직하게 표현한다.`;
+// ── Drive KB ──────────────────────────────────────────────
+const ASTERION_BASE = `너는 ASTERION의 내부 전용 AI다. ASTERION은 베딕 점성술(Lahiri 아야남샤)과 명리학을 결합한 에너지 공학 기반 분석 엔진이다. BTR(Birth Time Rectification)을 통해 개인 표준시를 확정하고, S-Class(97점↑ Hard Stop) 달성 이후에만 분석 결과물이 생성된다. asterion-mcp의 모든 도구를 자유롭게 사용한다.\n\n[운영 중인 시스템]\n- Archive GAS     : StructureCode 관리, PDF 생성, ExpireDate 기반 개인정보 삭제\n- 3자 루브릭      : Claude × Gemini × GPT, Hard Stop = 세 AI 97점↑ AND critical_issues 없음\n- ASTERION Flow   : BTR Result Code 기반 구독 분석 (Annual/Monthly/Weekly)\n- asterion-mcp    : L0~L6 단일 MCP 서버 (79개 도구), Cloud Run 배포\n\n[핵심 스프레드시트 ID]\n- Archive:        1ym1cgr1apEyTlqtJXqrfdnLjoyJTh086CjGycMcUOS8\n- JuliarCalendar: 1whKvFyWmb-qbR6OJt5dcI6WOJMLB5MUIzNMlJBFeq_g\n\n[알림 시스템]\n- BTRNotifications 시트에서 pending 알림 폴링 (5초 간격 SSE)\n- 알림 유형: info_request(추가정보 요청), phase_confirm(Phase 구간 확인)\n- 관리자 응답 → Gemini에게 전달 → BTR 파이프라인 계속 진행\n\n[중요] 도구 목록을 언급할 때는 반드시 아래 [실제 연결된 MCP 도구] 섹션의 도구 이름만 사용한다. 존재하지 않는 도구를 절대 만들어내지 않는다.\n\n외부 요청에 정확성과 무결성을 최우선으로 하고, 확신하지 못하는 부분은 솔직하게 표현한다.`;
 
 let knowledgeContext = '', knowledgeStatus = 'not_loaded';
 
@@ -98,9 +90,7 @@ async function loadDriveKnowledge() {
 }
 loadDriveKnowledge();
 
-// ────────────────────────────────────────────────────────────
-// MCP Client
-// ────────────────────────────────────────────────────────────
+// ── MCP Client ────────────────────────────────────────────
 let mcpClient = null, mcpTools = [], mcpRetryTimer = null;
 function buildSSEUrl(u) { const s = u.replace(/\/$/, ''); return s.endsWith('/sse') ? s : s + '/sse'; }
 
@@ -129,9 +119,8 @@ async function callMCPTool(name, input) {
   catch (e) { return JSON.stringify({ error: e.message }); }
 }
 
-// ────────────────────────────────────────────────────────────
-// BTR Notifications — Sheets CRUD
-// ────────────────────────────────────────────────────────────
+// ── BTR Notifications — Sheets CRUD ──────────────────────
+// GCP ADC (Cloud Run SA) 사용 — Archive SS에 편집자 권한 부여됨
 async function fetchBTRNotifications() {
   const tok = await getGCPToken();
   if (!tok) return [];
@@ -140,7 +129,7 @@ async function fetchBTRNotifications() {
       `https://sheets.googleapis.com/v4/spreadsheets/${ARCHIVE_SS_ID}/values/${encodeURIComponent(NOTIF_SHEET)}`,
       { headers: { Authorization: `Bearer ${tok}` } }
     );
-    if (!r.ok) return [];
+    if (!r.ok) { console.warn('[Notif] Sheets 읽기 실패:', r.status); return []; }
     const rows = ((await r.json()).values) || [];
     if (rows.length < 2) return [];
     return rows.slice(1)
@@ -178,9 +167,7 @@ async function updateNotifStatus(id, status) {
   } catch(e) { console.error('[Notif UPDATE]', e.message); return false; }
 }
 
-// ────────────────────────────────────────────────────────────
-// SSE 브로드캐스터
-// ────────────────────────────────────────────────────────────
+// ── SSE 브로드캐스터 ──────────────────────────────────────
 const notifClients  = new Set();
 let   lastNotifHash = '';
 
@@ -198,16 +185,14 @@ async function notifBackgroundPoll() {
     if (hash !== lastNotifHash) {
       lastNotifHash = hash;
       sendToAll({ notifications: notifs });
-      console.log(`[Notif] 변경 감지 → ${notifs.length}건 브로드캐스트`);
+      if (notifs.length > 0) console.log(`[Notif] 변경 감지 → ${notifs.length}건 브로드캐스트`);
     }
   } catch(_) {}
   setTimeout(notifBackgroundPoll, 5000);
 }
 notifBackgroundPoll();
 
-// ────────────────────────────────────────────────────────────
-// System Prompt Builders
-// ────────────────────────────────────────────────────────────
+// ── System Prompt Builders ────────────────────────────────
 const writeSSE  = (res, p) => res.write(`data: ${JSON.stringify(p)}\n\n`);
 const writeDone = (res)    => res.write('data: [DONE]\n\n');
 
@@ -224,15 +209,17 @@ function emitChunked(res, text) { for (const c of (text.match(/[\s\S]{1,80}/g) |
 
 function buildMcpToolSection() {
   if (mcpTools.length === 0) return '';
-  const byLayer = {
-    L0: mcpTools.filter(t => ['geocode_location','get_timezone','get_planet_positions','get_house_positions','get_navamsa_chart','get_ascendant','get_planet_in_house','get_planet_in_sign','get_current_dasha','get_dasha_timeline','get_dasha_sandhi','get_birth_nakshatra','get_planet_yogas','get_transit_planets','get_full_chart_analysis','get_horoscope_predictions','get_match_report','get_numerology_prediction','get_ashtakvarga_data','astro_check_retrograde','astro_planetary_war_check'].includes(t.name)).map(t=>t.name),
-    L1: mcpTools.filter(t => ['create_btr_session','save_runtime_snapshot','get_runtime_snapshot','purge_runtime_state','save_evolution_log','get_evolution_history','validate_sclass_gate','btr_init_candidate_slots','btr_consensus_analyzer','btr_conflict_axis_finder','btr_re_eval_pivots','btr_weight_adjuster','btr_prediction_tester'].includes(t.name)).map(t=>t.name),
-    L2: mcpTools.filter(t => ['gcloud_submit','cloudbuild_status','cloudrun_services','artifact_list','cloudrun_set_env','agent_registry_list','agent_registry_register'].includes(t.name)).map(t=>t.name),
-    L3: mcpTools.filter(t => ['github_read_file','github_write_file','github_list_files','sheets_read','sheets_write','http_request','get_system_status','append_sheet_row'].includes(t.name)).map(t=>t.name),
-    L4: mcpTools.filter(t => ['read_google_doc','create_google_doc','create_spreadsheet','export_doc_as_pdf','delete_drive_file','create_drive_folder','delete_drive_folder','list_drive_contents','list_script_projects','get_script_content','update_script_file','deploy_script_webapp','backup_script_project','delete_artifact_image','list_run_revisions','delete_run_revision','create_btr_report_doc'].includes(t.name)).map(t=>t.name),
-    L5: mcpTools.filter(t => ['call_gemini','call_claude','call_gpt'].includes(t.name)).map(t=>t.name),
-    L6: mcpTools.filter(t => ['report_generate_btr_code','report_generate_summary','report_add_gemstone_advice','ops_audit_log_exporter','ops_pattern_match_failure'].includes(t.name)).map(t=>t.name),
-  };
+  // ★ v3.6: L1·L3 업데이트
+  const L0_NAMES = ['geocode_location','get_timezone','get_planet_positions','get_house_positions','get_navamsa_chart','get_ascendant','get_planet_in_house','get_planet_in_sign','get_current_dasha','get_dasha_timeline','get_dasha_sandhi','get_birth_nakshatra','get_planet_yogas','get_transit_planets','get_full_chart_analysis','get_horoscope_predictions','get_match_report','get_numerology_prediction','get_ashtakvarga_data','astro_check_retrograde','astro_planetary_war_check'];
+  const L1_NAMES = ['create_btr_session','save_runtime_snapshot','get_runtime_snapshot','purge_runtime_state','save_evolution_log','get_evolution_history','validate_sclass_gate','btr_init_candidate_slots','btr_consensus_analyzer','btr_conflict_axis_finder','btr_re_eval_pivots','btr_weight_adjuster','btr_prediction_tester','btr_write_notification','btr_finalize_confirmed','btr_finalize_held','init_btr_sheets'];
+  const L2_NAMES = ['gcloud_submit','cloudbuild_status','cloudrun_services','artifact_list','cloudrun_set_env','agent_registry_list','agent_registry_register'];
+  const L3_NAMES = ['github_read_file','github_write_file','github_list_files','gh_push_files','sheets_read','sheets_write','http_request','get_system_status','append_sheet_row'];
+  const L4_NAMES = ['read_google_doc','create_google_doc','create_spreadsheet','export_doc_as_pdf','delete_drive_file','create_drive_folder','delete_drive_folder','list_drive_contents','list_script_projects','get_script_content','update_script_file','deploy_script_webapp','backup_script_project','delete_artifact_image','list_run_revisions','delete_run_revision','create_btr_report_doc'];
+  const L5_NAMES = ['call_gemini','call_claude','call_gpt'];
+  const L6_NAMES = ['report_generate_btr_code','report_generate_summary','report_add_gemstone_advice','ops_audit_log_exporter','ops_pattern_match_failure'];
+
+  const f = (names) => mcpTools.filter(t => names.includes(t.name)).map(t => t.name);
+  const byLayer = { L0:f(L0_NAMES), L1:f(L1_NAMES), L2:f(L2_NAMES), L3:f(L3_NAMES), L4:f(L4_NAMES), L5:f(L5_NAMES), L6:f(L6_NAMES) };
   const lines = [`\n\n[실제 연결된 MCP 도구 ${mcpTools.length}개 — asterion-mcp]`];
   if (byLayer.L0.length) lines.push(`L0 VedAstro(${byLayer.L0.length}): ${byLayer.L0.join(', ')}`);
   if (byLayer.L1.length) lines.push(`L1 BTR(${byLayer.L1.length}): ${byLayer.L1.join(', ')}`);
@@ -287,9 +274,7 @@ function normGPTInput(msgs, sys) {
   return out;
 }
 
-// ────────────────────────────────────────────────────────────
-// AI Runners
-// ────────────────────────────────────────────────────────────
+// ── AI Runners ────────────────────────────────────────────
 async function runClaude(apiMsgs, systemBlocks, res) {
   if (!CLAUDE_KEY) { writeSSE(res, { error:'ANTHROPIC_API_KEY 미설정' }); return; }
   const mcpSseUrl = MCP_SERVER_URL ? buildSSEUrl(MCP_SERVER_URL) : null;
@@ -365,9 +350,7 @@ async function runGPT(inputMsgs, res) {
   }
 }
 
-// ────────────────────────────────────────────────────────────
-// API Routes
-// ────────────────────────────────────────────────────────────
+// ── API Routes ────────────────────────────────────────────
 app.post('/api/chat', async (req, res) => {
   const { model='claude', messages=[], system='', freestyle=false } = req.body;
   res.setHeader('Content-Type','text/event-stream');
@@ -422,12 +405,13 @@ app.delete('/api/notifications/:id', async (req, res) => {
 });
 
 app.get('/api/status', (_req, res) => res.json({
-  claude:    { model:CLAUDE_MODEL, thinking:'extended(10k)', mcp:'native-API-connector', api:CLAUDE_KEY?'OK':'⚠ 미설정' },
-  gemini:    { model:GEMINI_MODEL, thinking:'기본값', mcp:`manual(${mcpTools.length}tools)`, api:GEMINI_KEY?'OK':'⚠ 미설정' },
-  gpt:       { model:GPT_MODEL, thinking:'reasoning:medium', mcp:'native-Responses-API', api:OPENAI_KEY?'OK':'⚠ 미설정' },
-  drive:     { status:knowledgeStatus, chars:knowledgeContext.length },
-  mcp:       { connected:!!mcpClient, tools:mcpTools.length, url:MCP_SERVER_URL||'미설정', secretKey:MCP_SECRET_KEY?'✓':'미설정' },
+  claude:       { model:CLAUDE_MODEL, thinking:'extended(10k)', mcp:'native-API-connector', api:CLAUDE_KEY?'OK':'⚠ 미설정' },
+  gemini:       { model:GEMINI_MODEL, thinking:'기본값', mcp:`manual(${mcpTools.length}tools)`, api:GEMINI_KEY?'OK':'⚠ 미설정' },
+  gpt:          { model:GPT_MODEL, thinking:'reasoning:medium', mcp:'native-Responses-API', api:OPENAI_KEY?'OK':'⚠ 미설정' },
+  drive:        { status:knowledgeStatus, chars:knowledgeContext.length },
+  mcp:          { connected:!!mcpClient, tools:mcpTools.length, url:MCP_SERVER_URL||'미설정', secretKey:MCP_SECRET_KEY?'✓':'미설정' },
   notifClients: notifClients.size,
+  notifSystem:  { sheet:NOTIF_SHEET, poll:'5s SSE', auth:'GCP ADC (SA)' },
 }));
 
 app.post('/api/reload-knowledge', async (_req, res) => {
@@ -442,11 +426,12 @@ app.post('/api/reconnect-mcp', async (_req, res) => {
   res.json({ connected:!!mcpClient, tools:mcpTools.length });
 });
 
-// ────────────────────────────────────────────────────────────
+// ──────────────────────────────────────────────────────────
 app.listen(PORT, '0.0.0.0', () => {
-  console.log(`🔱 ASTERION Hub v3.5 — port ${PORT}`);
+  console.log(`🔱 ASTERION Hub v3.6 — port ${PORT}`);
   console.log(`   COOP/COEP: same-origin / credentialless → SharedArrayBuffer 활성화`);
   console.log(`   Claude : ${CLAUDE_MODEL} | Native MCP ${CLAUDE_KEY?'✓':'✗'}`);
   console.log(`   Gemini : ${GEMINI_MODEL} | Function Calling ${GEMINI_KEY?'✓':'✗'}`);
   console.log(`   MCP    : ${MCP_SERVER_URL||'미설정'} | tools:${mcpTools.length}`);
+  console.log(`   Notif  : BTRNotifications SSE poll (5s) | GCP ADC`);
 });
