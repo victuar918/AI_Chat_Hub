@@ -110,9 +110,9 @@ select{background:var(--bg2);border:1px solid var(--bdr);color:var(--tx2);border
 <div id="sys-panel"><textarea id="sys-ta" placeholder="추가 시스템 지시 (기본 프롬프트에 append)"></textarea></div>
 <div id="settings-panel">
 
-  <!-- ── TTS: Supertonic 3 (Transformers.js v5.0) ── -->
+  <!-- ── TTS: Supertonic v2 (Transformers.js v5.1) ── -->
   <div class="sp-section">
-    <div class="sp-title">🎙 Supertonic 3 TTS <span class="sp-badge" id="st-badge">미로드</span></div>
+    <div class="sp-title">🎙 Supertonic TTS <span class="sp-badge" id="st-badge">미로드</span></div>
     <div class="sp-info" id="st-status-msg">모델 로드 버튼을 누르면 HuggingFace에서 자동 다운로드됩니다. (첫 실행 시 약 200MB, 이후 브라우저 캐시)</div>
     <div class="sp-mono" id="st-model-names" style="display:none"></div>
     <div class="sp-row" style="gap:8px;margin-bottom:10px;">
@@ -145,8 +145,8 @@ select{background:var(--bg2);border:1px solid var(--bdr);color:var(--tx2);border
       <span class="sp-val" id="tts-speed-val">1.00x</span>
     </div>
     <div class="sp-info" style="margin-top:4px;font-size:10px;">
-      모델: <a href="https://huggingface.co/onnx-community/Supertonic-TTS-ONNX" target="_blank">onnx-community/Supertonic-TTS-ONNX</a>
-      · Lexicon Skip 없음 · 44.1kHz · WebGPU/WASM
+      모델: <a href="https://huggingface.co/onnx-community/Supertonic-TTS-2-ONNX" target="_blank">Supertonic-TTS-2-ONNX</a>
+      · 한국어/영어/스페인어/포르투갈어/프랑스어 · 44.1kHz · WebGPU/WASM
     </div>
   </div>
 
@@ -186,22 +186,31 @@ const STP={steps:5,speed:1.0,voice:'F1'};
 let pendingNotifs=[],btrOpen=false,sseConn=null;
 const MODEL_STYLE={claude:{avClass:'a-claude',whoClass:'claude',label:'CLAUDE',icon:'✦'},gemini:{avClass:'a-gemini',whoClass:'gemini',label:'GEMINI',icon:'◈'}};
 
-// ══ SUPERTONIC TTS ENGINE v5.0 (Transformers.js) ══
-// v5.0: 공식 onnx-community/Supertonic-TTS-ONNX + Transformers.js pipeline API
-//   이전(v4.2.x): sherpa-onnx 7파일 수동 업로드, Lexicon Skip 문제
-//   v5.0 개선:
-//     ✅ HuggingFace 자동 다운로드 (첫 실행 ~200MB, 이후 브라우저 캐시)
-//     ✅ 공식 HF 토크나이저 → Lexicon Skip 완전 해결
-//     ✅ WebGPU 우선 시도, 불가 시 WASM 자동 폴백
-//     ✅ 3모델 파이프라인 + 디퓨전 루프 자동 처리
-//     ✅ 화자: F1-F5(여성), M1-M5(남성)
-//     ✅ 44100Hz 고품질 출력
+// ══ SUPERTONIC TTS ENGINE v5.1 ══
+// v5.0 버그: onnx-community/Supertonic-TTS-ONNX = v1 영어 전용 → 한국어 전부 건너뜀
+// v5.1 수정:
+//   ✅ 모델 교체: Supertonic-TTS-2-ONNX (한국어/영어/스페인어/포르투갈어/프랑스어)
+//   ✅ 언어 태그 자동 삽입: 한국어 감지 → <ko>텍스트</ko>, 그 외 → <en>text</en>
+//   ✅ 일본어도 감지: <ja>テキスト</ja>
+//   향후: Supertonic 3 browser ONNX 공식 예제 출시 시 31개 언어로 업그레이드
 const TF_CDN = 'https://cdn.jsdelivr.net/npm/@huggingface/transformers@3/dist/transformers.min.js';
-const VOICE_BASE = 'https://huggingface.co/onnx-community/Supertonic-TTS-ONNX/resolve/main/voices/';
+const TF_MODEL = 'onnx-community/Supertonic-TTS-2-ONNX';  // ★ v5.1: v2 모델 (한국어 지원)
+const VOICE_BASE = 'https://huggingface.co/onnx-community/Supertonic-TTS-2-ONNX/resolve/main/voices/';
 
 let stPipeline = null, stReady = false, stLoading = false;
 let activeTtsStop = false, activeTtsCtx = null;
 let detectedEP = 'WASM';
+
+// ★ v5.1 핵심: 언어 감지 후 태그 래핑
+// Supertonic v2는 텍스트에 <lang> 태그가 없으면 영어로 처리함
+// 한국어(AC00-D7A3), 일본어(3040-30FF, 4E00-9FFF), 그 외 = en
+function wrapLangTag(text) {
+  const hasKorean  = /[\uAC00-\uD7A3]/.test(text);
+  const hasJapanese = /[\u3040-\u30FF\u4E00-\u9FFF]/.test(text);
+  if (hasKorean)  return `<ko>${text}</ko>`;
+  if (hasJapanese) return `<ja>${text}</ja>`;
+  return `<en>${text}</en>`;
+}
 
 async function loadSupertonicModel() {
   if (stLoading) return;
@@ -212,7 +221,6 @@ async function loadSupertonicModel() {
   setStBadge('loading', '로딩 중...');
   showTtsProgress('Transformers.js 초기화 중...');
   try {
-    // ESM 동적 import
     const { pipeline } = await import(TF_CDN);
 
     // WebGPU 가용 여부 확인
@@ -220,15 +228,15 @@ async function loadSupertonicModel() {
     if (navigator.gpu) {
       try {
         const adapter = await navigator.gpu.requestAdapter();
-        if (adapter) { device = 'webgpu'; console.log('[TTS v5.0] WebGPU 사용 가능'); }
-      } catch(_) { console.log('[TTS v5.0] WebGPU 불가 → WASM 폴백'); }
+        if (adapter) { device = 'webgpu'; console.log('[TTS v5.1] WebGPU 사용'); }
+      } catch(_) { console.log('[TTS v5.1] WebGPU 불가 → WASM'); }
     }
 
     showTtsProgress(`모델 다운로드 중 [${device.toUpperCase()}]...`);
 
     stPipeline = await pipeline(
       'text-to-speech',
-      'onnx-community/Supertonic-TTS-ONNX',
+      TF_MODEL,
       {
         device,
         progress_callback: (p) => {
@@ -238,8 +246,8 @@ async function loadSupertonicModel() {
             showTtsProgress(`⬇ ${p.file.split('/').pop()} (${pct})`);
           } else if (p.status === 'loading' && p.file) {
             showTtsProgress(`🔧 ${p.file.split('/').pop()} 로딩 중...`);
-          } else if (p.status === 'initiate') {
-            showTtsProgress(`준비 중: ${p.file ? p.file.split('/').pop() : '모델'}...`);
+          } else if (p.status === 'initiate' && p.file) {
+            showTtsProgress(`준비: ${p.file.split('/').pop()}...`);
           }
         }
       }
@@ -250,15 +258,19 @@ async function loadSupertonicModel() {
     setStBadge('ready', '준비됨 ✓');
     const nm = document.getElementById('st-model-names');
     nm.style.display = 'block';
-    nm.textContent = `EP: ${device.toUpperCase()} | onnx-community/Supertonic-TTS-ONNX\n화자: F1~F5(여성), M1~M5(남성) | 44100Hz\nLexicon Skip 없음 — 공식 HF 토크나이저`;
+    nm.textContent =
+      `EP: ${device.toUpperCase()} | ${TF_MODEL}\n` +
+      `화자: F1~F5(여성), M1~M5(남성) | 44100Hz\n` +
+      `지원 언어: ko / en / es / pt / fr (자동 감지 태그)\n` +
+      `v5.1: <ko>한국어</ko> 태그 자동 삽입`;
     document.getElementById('st-status-msg').textContent =
-      `Supertonic 3 준비 완료 [${device.toUpperCase()}]. Lexicon Skip 없음 · 44.1kHz`;
-    toast(`✅ Supertonic TTS 준비 완료! [${device.toUpperCase()}]`);
+      `Supertonic v2 준비 완료 [${device.toUpperCase()}]. 한국어 지원 ✓`;
+    toast(`✅ TTS 준비 완료! 한국어 지원 [${device.toUpperCase()}]`);
   } catch(e) {
     stReady = false;
     setStBadge('error', '오류');
     document.getElementById('st-status-msg').textContent = '오류: ' + e.message;
-    console.error('[TTS v5.0]', e);
+    console.error('[TTS v5.1]', e);
     toast('TTS 로드 실패: ' + e.message.slice(0, 60), 7000);
   }
   hideTtsProgress();
@@ -266,15 +278,15 @@ async function loadSupertonicModel() {
   if (loadBtn) loadBtn.disabled = false;
 }
 
-// 음성 합성 (단일 청크)
+// ★ v5.1: wrapLangTag 적용
 async function synthSupertonic(text, voice, steps, speed) {
   if (!stReady || !stPipeline) throw new Error('엔진 미준비');
-  const result = await stPipeline(text, {
+  const taggedText = wrapLangTag(text);  // <ko>한국어</ko> 또는 <en>English</en>
+  const result = await stPipeline(taggedText, {
     speaker_embeddings: VOICE_BASE + voice + '.bin',
     num_inference_steps: steps,
     speed: speed,
   });
-  // result.audio = Float32Array, result.sampling_rate = 44100
   return { samples: Float32Array.from(result.audio), sampleRate: result.sampling_rate || 44100 };
 }
 
@@ -291,7 +303,6 @@ function float32ToWav(s, sr) {
   return b;
 }
 
-// Web Audio API로 PCM 재생
 async function playChunk(samples, sampleRate) {
   if (activeTtsStop) return;
   const ctx = new AudioContext(); activeTtsCtx = ctx;
@@ -301,15 +312,13 @@ async function playChunk(samples, sampleRate) {
     const src = ctx.createBufferSource();
     src.buffer = ab; src.connect(ctx.destination); src.start();
     await new Promise(res => { src.onended = res; });
-  } catch(e) {
-    console.warn('[TTS playChunk]', e);
-  } finally {
+  } catch(e) { console.warn('[TTS playChunk]', e); } finally {
     try { ctx.close(); } catch(_) {}
     if (activeTtsCtx === ctx) activeTtsCtx = null;
   }
 }
 
-// 텍스트 → 청크 분할 (문장 단위)
+// 텍스트 청크 분할 (문장 단위)
 function splitTextChunks(text) {
   const maxLen = 150;
   const sentences = text.match(/[^.!?。！？\n]+[.!?。！？\n]?/g) || [text];
@@ -324,9 +333,8 @@ function splitTextChunks(text) {
   return chunks.filter(c => c.length > 0);
 }
 
-// 메인 TTS 재생 (청크N 재생 중 청크N+1 합성 — 파이프라인)
+// 메인 TTS (파이프라인: 합성N+1 병렬)
 async function speakText(text, btnEl) {
-  // 토글: 같은 버튼 → 정지
   if (WS.activeBtn === btnEl) {
     activeTtsStop = true;
     if (activeTtsCtx) { try { activeTtsCtx.close(); } catch(_) {} }
@@ -334,7 +342,6 @@ async function speakText(text, btnEl) {
     if (window.speechSynthesis) window.speechSynthesis.cancel();
     return;
   }
-  // 다른 버튼 재생 중이면 정지
   if (WS.activeBtn) {
     activeTtsStop = true;
     if (activeTtsCtx) { try { activeTtsCtx.close(); } catch(_) {} }
@@ -343,14 +350,12 @@ async function speakText(text, btnEl) {
     WS.activeBtn = null;
     await new Promise(r => setTimeout(r, 100));
   }
-  // Supertonic 미로드 → Web Speech 폴백
   if (!stReady) { wsFallback(text, btnEl); return; }
   activeTtsStop = false;
   btnEl.innerHTML = '⏸ 정지'; btnEl.classList.add('playing'); WS.activeBtn = btnEl;
   const chunks = splitTextChunks(stripMd(text));
   if (!chunks.length) { resetBtn(btnEl); return; }
   try {
-    // 파이프라인: 합성N 시작 → 재생N + 합성N+1 병렬
     let nextSynth = synthSupertonic(chunks[0], STP.voice, STP.steps, STP.speed);
     for (let i = 0; i < chunks.length; i++) {
       if (activeTtsStop) break;
@@ -362,10 +367,7 @@ async function speakText(text, btnEl) {
       await playChunk(wav.samples, wav.sampleRate);
     }
   } catch(e) {
-    if (!activeTtsStop) {
-      console.error('[TTS pipeline v5.0]', e);
-      toast(String(e.message || e).slice(0, 80), 6000);
-    }
+    if (!activeTtsStop) { console.error('[TTS v5.1 pipeline]', e); toast(String(e.message||e).slice(0,80), 6000); }
   }
   hideTtsProgress();
   if (!activeTtsStop) resetBtn(btnEl);
@@ -375,8 +377,6 @@ function resetBtn(b) {
   if (b) { b.innerHTML = '▶ 재생'; b.classList.remove('playing'); }
   if (WS.activeBtn === b) WS.activeBtn = null;
 }
-
-// Web Speech API 폴백
 function wsFallback(text, btnEl) {
   const synth = window.speechSynthesis; if (!synth) { toast('TTS 미지원'); return; }
   const utt = new SpeechSynthesisUtterance(stripMd(text));
@@ -385,16 +385,13 @@ function wsFallback(text, btnEl) {
   utt.onend = utt.onerror = () => { resetBtn(btnEl); };
   synth.speak(utt);
 }
-
-// 마크다운 제거
 function stripMd(t) {
   return t.replace(/#{1,6}\s/g,'').replace(/\*\*([^*]+)\*\*/g,'$1').replace(/\*([^*]+)\*/g,'$1')
     .replace(/`[^`]+`/g,'').replace(/\n+/g,' ').replace(/\[([^\]]+)\]\([^)]+\)/g,'$1').trim();
 }
 
-// 테스트
 async function testTts() {
-  const testText = '안녕하세요. ASTERION 에너지 분석 시스템입니다. 수퍼토닉 목소리 테스트입니다.';
+  const testText = '안녕하세요. ASTERION 에너지 분석 시스템입니다. 한국어 테스트입니다.';
   if (stReady) await speakText(testText, document.getElementById('st-test-btn'));
   else { toast('모델 미로드 — Web Speech로 재생'); testWsSpeech(); }
 }
@@ -410,7 +407,6 @@ function testWsSpeech() {
   synth.speak(utt);
 }
 
-// 설정 UI 헬퍼
 function updateStepsVal(){STP.steps=parseInt(document.getElementById('st-steps').value);document.getElementById('st-steps-val').textContent=STP.steps;saveTtsPref();}
 function updateSpeedVal(){STP.speed=parseFloat(document.getElementById('tts-speed').value);document.getElementById('tts-speed-val').textContent=STP.speed.toFixed(2)+'x';saveTtsPref();}
 function updateWsTtsParam(){WS.rate=parseFloat(document.getElementById('tts-rate').value);WS.pitch=parseFloat(document.getElementById('tts-pitch').value);document.getElementById('tts-rate-val').textContent=WS.rate.toFixed(1)+'x';document.getElementById('tts-pitch-val').textContent=WS.pitch.toFixed(1);saveTtsPref();}
@@ -419,7 +415,7 @@ function setStBadge(cls,text){const el=document.getElementById('st-badge');el.cl
 function showTtsProgress(msg){const el=document.getElementById('tts-progress');el.textContent=msg;el.classList.add('show');}
 function hideTtsProgress(){document.getElementById('tts-progress').classList.remove('show');}
 
-// ══ BTR 알림 시스템 ══
+// ══ BTR 알림 ══
 function connectNotifSSE(){
   if(sseConn){sseConn.close();sseConn=null;}
   const es=new EventSource('/api/notifications/stream');sseConn=es;
@@ -534,7 +530,6 @@ async function init(){
   marked.setOptions({breaks:true,gfm:true,highlight:(c,l)=>{if(l&&hljs.getLanguage(l))return hljs.highlight(c,{language:l}).value;return hljs.highlightAuto(c).value;}});
   checkStatus();connectNotifSSE();
 }
-
 function save(){localStorage.setItem('ah-v50',JSON.stringify({model:S.model,freestyle:S.freestyle,wsRate:WS.rate,wsPitch:WS.pitch,stVoice:STP.voice,stSteps:STP.steps,stSpeed:STP.speed}));}
 
 init();
