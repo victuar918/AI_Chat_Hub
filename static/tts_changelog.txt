@@ -1,0 +1,8 @@
+// ══ SUPERTONIC TTS ENGINE v5.1 (Transformers.js) ══
+// v5.0: onnx-community/Supertonic-TTS-ONNX (v1 — 영어 전용) → 한국어 건너뜀 버그
+// v5.1: onnx-community/Supertonic-TTS-2-ONNX (v2 — ko/en/es/pt/fr 5개 언어)
+//   핵심 수정:
+//   ✅ 모델 교체 → Supertonic-TTS-2-ONNX
+//   ✅ 언어 태그 자동 삽입 — <ko>한국어</ko> / <en>English</en>
+//   ✅ 한국어/영어/일본어 감지 정규식
+//   한계: v2는 5개 언어만 지원. 31개 언어 지원은 Supertonic 3 browser ONNX 구현 시 업그레이드 예정
