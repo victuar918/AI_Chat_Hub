@@ -1,6 +1,9 @@
 /**
- * ASTERION Hub — Chat Backend v3.6
- * v3.6: L1/L3 도구 목록 업데이트 (btr_write_notification, btr_finalize_*, init_btr_sheets, gh_push_files)
+ * ASTERION Hub — Chat Backend v3.9.1
+ * v3.9.1: /api/sync-source-files 추가 — showDirectoryPicker로 읽은 BGV/BGM 목록을 SOURCE_FILES 시트에 자동 기록
+ * v3.9: VITS 70-speaker TTS (ORI-Muchim), 화자 탐색기 UI
+ * v3.8: TTS 자동로드, 드롭아웃 수정, MP3 저장
+ * v3.6: L1/L3 도구 목록 업데이트
  * v3.5: COOP/COEP 헤더 → SharedArrayBuffer + SSE 알림 시스템
  */
 
@@ -22,7 +25,6 @@ app.use(cors());
 app.use(express.json({ limit: '50mb' }));
 app.set('trust proxy', true);
 
-// ★ COOP/COEP 헤더 — SharedArrayBuffer 활성화 → WASM 멀티스레딩
 app.use((_req, res, next) => {
   res.setHeader('Cross-Origin-Opener-Policy', 'same-origin');
   res.setHeader('Cross-Origin-Embedder-Policy', 'credentialless');
@@ -43,11 +45,11 @@ const DRIVE_FOLDER_ID = process.env.ASTERION_KNOWLEDGE_FOLDER_ID || '';
 const MCP_SERVER_URL  = process.env.MCP_SERVER_URL  || '';
 const MCP_SECRET_KEY  = process.env.MCP_SECRET_KEY  || '';
 const ARCHIVE_SS_ID   = '1ym1cgr1apEyTlqtJXqrfdnLjoyJTh086CjGycMcUOS8';
+const VIDEO_SS_ID     = '1ugWJmyLItD95Vz7Jq8Wjxn0_Ml5REjrhUxNZVFoIFmc';
 const NOTIF_SHEET     = 'BTRNotifications';
 const MAX_MSG_PAIRS   = 20;
 const MAX_TOOL_DEPTH  = 8;
 
-// ── GCP ADC 토큰 ──────────────────────────────────────────
 async function getGCPToken() {
   try {
     const r = await fetch(
@@ -59,8 +61,7 @@ async function getGCPToken() {
   } catch { return null; }
 }
 
-// ── Drive KB ──────────────────────────────────────────────
-const ASTERION_BASE = `너는 ASTERION의 내부 전용 AI다. ASTERION은 베딕 점성술(Lahiri 아야남샤)과 명리학을 결합한 에너지 공학 기반 분석 엔진이다. BTR(Birth Time Rectification)을 통해 개인 표준시를 확정하고, S-Class(97점↑ Hard Stop) 달성 이후에만 분석 결과물이 생성된다. asterion-mcp의 모든 도구를 자유롭게 사용한다.\n\n[운영 중인 시스템]\n- Archive GAS     : StructureCode 관리, PDF 생성, ExpireDate 기반 개인정보 삭제\n- 3자 루브릭      : Claude × Gemini × GPT, Hard Stop = 세 AI 97점↑ AND critical_issues 없음\n- ASTERION Flow   : BTR Result Code 기반 구독 분석 (Annual/Monthly/Weekly)\n- asterion-mcp    : L0~L6 단일 MCP 서버 (79개 도구), Cloud Run 배포\n\n[핵심 스프레드시트 ID]\n- Archive:        1ym1cgr1apEyTlqtJXqrfdnLjoyJTh086CjGycMcUOS8\n- JuliarCalendar: 1whKvFyWmb-qbR6OJt5dcI6WOJMLB5MUIzNMlJBFeq_g\n\n[알림 시스템]\n- BTRNotifications 시트에서 pending 알림 폴링 (5초 간격 SSE)\n- 알림 유형: info_request(추가정보 요청), phase_confirm(Phase 구간 확인)\n- 관리자 응답 → Gemini에게 전달 → BTR 파이프라인 계속 진행\n\n[중요] 도구 목록을 언급할 때는 반드시 아래 [실제 연결된 MCP 도구] 섹션의 도구 이름만 사용한다. 존재하지 않는 도구를 절대 만들어내지 않는다.\n\n외부 요청에 정확성과 무결성을 최우선으로 하고, 확신하지 못하는 부분은 솔직하게 표현한다.`;
+const ASTERION_BASE = `너는 ASTERION의 내부 전용 AI다. ASTERION은 베딕 점성술(Lahiri 아야남샤)과 명리학을 결합한 에너지 공학 기반 분석 엔진이다. BTR(Birth Time Rectification)을 통해 개인 표준시를 확정하고, S-Class(97점↑ Hard Stop) 달성 이후에만 분석 결과물이 생성된다. asterion-mcp의 모든 도구를 자유롭게 사용한다.\n\n[운영 중인 시스템]\n- Archive GAS     : StructureCode 관리, PDF 생성, ExpireDate 기반 개인정보 삭제\n- 3자 루브릭      : Claude × Gemini × GPT, Hard Stop = 세 AI 97점↑ AND critical_issues 없음\n- ASTERION Flow   : BTR Result Code 기반 구독 분석 (Annual/Monthly/Weekly)\n- asterion-mcp    : L0~L6 단일 MCP 서버 (84개 도구), Cloud Run 배포\n\n[핵심 스프레드시트 ID]\n- Archive:        1ym1cgr1apEyTlqtJXqrfdnLjoyJTh086CjGycMcUOS8\n- VideoAuto:      1ugWJmyLItD95Vz7Jq8Wjxn0_Ml5REjrhUxNZVFoIFmc\n- JuliarCalendar: 1whKvFyWmb-qbR6OJt5dcI6WOJMLB5MUIzNMlJBFeq_g\n\n[알림 시스템]\n- BTRNotifications 시트에서 pending 알림 폴링 (5초 간격 SSE)\n- 알림 유형: info_request(추가정보 요청), phase_confirm(Phase 구간 확인)\n- 관리자 응답 → Gemini에게 전달 → BTR 파이프라인 계속 진행\n\n[중요] 도구 목록을 언급할 때는 반드시 아래 [실제 연결된 MCP 도구] 섹션의 도구 이름만 사용한다. 존재하지 않는 도구를 절대 만들어내지 않는다.\n\n외부 요청에 정확성과 무결성을 최우선으로 하고, 확신하지 못하는 부분은 솔직하게 표현한다.`;
 
 let knowledgeContext = '', knowledgeStatus = 'not_loaded';
 
@@ -90,7 +91,6 @@ async function loadDriveKnowledge() {
 }
 loadDriveKnowledge();
 
-// ── MCP Client ────────────────────────────────────────────
 let mcpClient = null, mcpTools = [], mcpRetryTimer = null;
 function buildSSEUrl(u) { const s = u.replace(/\/$/, ''); return s.endsWith('/sse') ? s : s + '/sse'; }
 
@@ -119,8 +119,6 @@ async function callMCPTool(name, input) {
   catch (e) { return JSON.stringify({ error: e.message }); }
 }
 
-// ── BTR Notifications — Sheets CRUD ──────────────────────
-// GCP ADC (Cloud Run SA) 사용 — Archive SS에 편집자 권한 부여됨
 async function fetchBTRNotifications() {
   const tok = await getGCPToken();
   if (!tok) return [];
@@ -134,13 +132,8 @@ async function fetchBTRNotifications() {
     if (rows.length < 2) return [];
     return rows.slice(1)
       .map((row) => ({
-        id:         row[0] || '',
-        session_id: row[1] || '',
-        type:       row[2] || 'info_request',
-        title:      row[3] || '알림',
-        content:    row[4] || '',
-        status:     row[5] || 'pending',
-        created_at: row[6] || '',
+        id: row[0]||'', session_id: row[1]||'', type: row[2]||'info_request',
+        title: row[3]||'알림', content: row[4]||'', status: row[5]||'pending', created_at: row[6]||'',
       }))
       .filter(n => n.id && n.status === 'pending');
   } catch(e) { console.error('[Notif GET]', e.message); return []; }
@@ -167,7 +160,6 @@ async function updateNotifStatus(id, status) {
   } catch(e) { console.error('[Notif UPDATE]', e.message); return false; }
 }
 
-// ── SSE 브로드캐스터 ──────────────────────────────────────
 const notifClients  = new Set();
 let   lastNotifHash = '';
 
@@ -192,7 +184,6 @@ async function notifBackgroundPoll() {
 }
 notifBackgroundPoll();
 
-// ── System Prompt Builders ────────────────────────────────
 const writeSSE  = (res, p) => res.write(`data: ${JSON.stringify(p)}\n\n`);
 const writeDone = (res)    => res.write('data: [DONE]\n\n');
 
@@ -209,20 +200,18 @@ function emitChunked(res, text) { for (const c of (text.match(/[\s\S]{1,80}/g) |
 
 function buildMcpToolSection() {
   if (mcpTools.length === 0) return '';
-  // ★ v3.6: L1·L3 업데이트
-  const L0_NAMES = ['geocode_location','get_timezone','get_planet_positions','get_house_positions','get_navamsa_chart','get_ascendant','get_planet_in_house','get_planet_in_sign','get_current_dasha','get_dasha_timeline','get_dasha_sandhi','get_birth_nakshatra','get_planet_yogas','get_transit_planets','get_full_chart_analysis','get_horoscope_predictions','get_match_report','get_numerology_prediction','get_ashtakvarga_data','astro_check_retrograde','astro_planetary_war_check'];
-  const L1_NAMES = ['create_btr_session','save_runtime_snapshot','get_runtime_snapshot','purge_runtime_state','save_evolution_log','get_evolution_history','validate_sclass_gate','btr_init_candidate_slots','btr_consensus_analyzer','btr_conflict_axis_finder','btr_re_eval_pivots','btr_weight_adjuster','btr_prediction_tester','btr_write_notification','btr_finalize_confirmed','btr_finalize_held','init_btr_sheets'];
-  const L2_NAMES = ['gcloud_submit','cloudbuild_status','cloudrun_services','artifact_list','cloudrun_set_env','agent_registry_list','agent_registry_register'];
-  const L3_NAMES = ['github_read_file','github_write_file','github_list_files','gh_push_files','sheets_read','sheets_write','http_request','get_system_status','append_sheet_row'];
-  const L4_NAMES = ['read_google_doc','create_google_doc','create_spreadsheet','export_doc_as_pdf','delete_drive_file','create_drive_folder','delete_drive_folder','list_drive_contents','list_script_projects','get_script_content','update_script_file','deploy_script_webapp','backup_script_project','delete_artifact_image','list_run_revisions','delete_run_revision','create_btr_report_doc'];
-  const L5_NAMES = ['call_gemini','call_claude','call_gpt'];
-  const L6_NAMES = ['report_generate_btr_code','report_generate_summary','report_add_gemstone_advice','ops_audit_log_exporter','ops_pattern_match_failure'];
-
+  const L0 = ['geocode_location','get_timezone','get_planet_positions','get_house_positions','get_navamsa_chart','get_ascendant','get_planet_in_house','get_planet_in_sign','get_current_dasha','get_dasha_timeline','get_dasha_sandhi','get_birth_nakshatra','get_planet_yogas','get_transit_planets','get_full_chart_analysis','get_horoscope_predictions','get_match_report','get_numerology_prediction','get_ashtakvarga_data','astro_check_retrograde','astro_planetary_war_check'];
+  const L1 = ['create_btr_session','save_runtime_snapshot','get_runtime_snapshot','purge_runtime_state','save_evolution_log','get_evolution_history','validate_sclass_gate','btr_init_candidate_slots','btr_consensus_analyzer','btr_conflict_axis_finder','btr_re_eval_pivots','btr_weight_adjuster','btr_prediction_tester','btr_write_notification','btr_finalize_confirmed','btr_finalize_held','init_btr_sheets','video_init_sheets','video_create_script','video_read_script','video_update_row_status','video_delete_script'];
+  const L2 = ['gcloud_submit','cloudbuild_status','cloudrun_services','artifact_list','cloudrun_set_env','agent_registry_list','agent_registry_register'];
+  const L3 = ['github_read_file','github_write_file','github_list_files','gh_push_files','sheets_read','sheets_write','http_request','get_system_status','append_sheet_row'];
+  const L4 = ['read_google_doc','create_google_doc','create_spreadsheet','export_doc_as_pdf','delete_drive_file','create_drive_folder','delete_drive_folder','list_drive_contents','list_script_projects','get_script_content','update_script_file','deploy_script_webapp','backup_script_project','delete_artifact_image','list_run_revisions','delete_run_revision','create_btr_report_doc'];
+  const L5 = ['call_gemini','call_claude','call_gpt'];
+  const L6 = ['report_generate_btr_code','report_generate_summary','report_add_gemstone_advice','ops_audit_log_exporter','ops_pattern_match_failure'];
   const f = (names) => mcpTools.filter(t => names.includes(t.name)).map(t => t.name);
-  const byLayer = { L0:f(L0_NAMES), L1:f(L1_NAMES), L2:f(L2_NAMES), L3:f(L3_NAMES), L4:f(L4_NAMES), L5:f(L5_NAMES), L6:f(L6_NAMES) };
+  const byLayer = { L0:f(L0), L1:f(L1), L2:f(L2), L3:f(L3), L4:f(L4), L5:f(L5), L6:f(L6) };
   const lines = [`\n\n[실제 연결된 MCP 도구 ${mcpTools.length}개 — asterion-mcp]`];
   if (byLayer.L0.length) lines.push(`L0 VedAstro(${byLayer.L0.length}): ${byLayer.L0.join(', ')}`);
-  if (byLayer.L1.length) lines.push(`L1 BTR(${byLayer.L1.length}): ${byLayer.L1.join(', ')}`);
+  if (byLayer.L1.length) lines.push(`L1 BTR+Video(${byLayer.L1.length}): ${byLayer.L1.join(', ')}`);
   if (byLayer.L2.length) lines.push(`L2 GCloud(${byLayer.L2.length}): ${byLayer.L2.join(', ')}`);
   if (byLayer.L3.length) lines.push(`L3 SystemOps(${byLayer.L3.length}): ${byLayer.L3.join(', ')}`);
   if (byLayer.L4.length) lines.push(`L4 Workspace(${byLayer.L4.length}): ${byLayer.L4.join(', ')}`);
@@ -274,7 +263,6 @@ function normGPTInput(msgs, sys) {
   return out;
 }
 
-// ── AI Runners ────────────────────────────────────────────
 async function runClaude(apiMsgs, systemBlocks, res) {
   if (!CLAUDE_KEY) { writeSSE(res, { error:'ANTHROPIC_API_KEY 미설정' }); return; }
   const mcpSseUrl = MCP_SERVER_URL ? buildSSEUrl(MCP_SERVER_URL) : null;
@@ -366,6 +354,52 @@ app.post('/api/chat', async (req, res) => {
   writeDone(res); res.end();
 });
 
+// ★ SOURCE_FILES 자동 동기화
+// 프론트(showDirectoryPicker) → BGV/BGM 파일명 배열 전달 → Sheets 갱신
+app.post('/api/sync-source-files', async (req, res) => {
+  const {
+    bgv = [],
+    bgm = [],
+    spreadsheet_id = VIDEO_SS_ID
+  } = req.body;
+
+  const tok = await getGCPToken();
+  if (!tok) return res.json({ success:false, error:'GCP ADC 인증 실패' });
+
+  const today = new Date().toISOString().slice(0, 10);
+  const rows = [
+    ['Type','Filename','Duration_Sec','Category','Tags','Notes','Last_Sync'],
+    ...bgv.map(f => ['BGV', f, '', 'background-video', '', '', today]),
+    ...bgm.map(f => ['BGM', f, '', 'background-music', '', '', today]),
+  ];
+
+  try {
+    const r = await fetch(
+      `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheet_id}/values/${encodeURIComponent('SOURCE_FILES!A1')}?valueInputOption=USER_ENTERED`,
+      {
+        method: 'PUT',
+        headers: { Authorization: `Bearer ${tok}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ values: rows })
+      }
+    );
+    if (!r.ok) {
+      const err = await r.text();
+      return res.json({ success:false, error:`Sheets ${r.status}: ${err.slice(0,100)}` });
+    }
+    console.log(`[Sync] SOURCE_FILES 업데이트 — BGV:${bgv.length} BGM:${bgm.length}`);
+    return res.json({
+      success: true,
+      bgv_count: bgv.length,
+      bgm_count: bgm.length,
+      total_files: bgv.length + bgm.length,
+      sheet_rows: rows.length - 1,
+      synced_at: today,
+    });
+  } catch(e) {
+    return res.json({ success:false, error:e.message });
+  }
+});
+
 app.get('/api/notifications/stream', (req, res) => {
   res.setHeader('Content-Type',  'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
@@ -386,21 +420,13 @@ app.get('/api/notifications', async (_req, res) => {
 
 app.post('/api/notifications/:id/respond', async (req, res) => {
   const ok = await updateNotifStatus(req.params.id, 'responded');
-  if (ok) {
-    const notifs = await fetchBTRNotifications();
-    lastNotifHash = notifs.map(n => n.id).sort().join(',');
-    sendToAll({ notifications: notifs });
-  }
+  if (ok) { const notifs = await fetchBTRNotifications(); lastNotifHash = notifs.map(n => n.id).sort().join(','); sendToAll({ notifications: notifs }); }
   res.json({ success: ok });
 });
 
 app.delete('/api/notifications/:id', async (req, res) => {
   const ok = await updateNotifStatus(req.params.id, 'dismissed');
-  if (ok) {
-    const notifs = await fetchBTRNotifications();
-    lastNotifHash = notifs.map(n => n.id).sort().join(',');
-    sendToAll({ notifications: notifs });
-  }
+  if (ok) { const notifs = await fetchBTRNotifications(); lastNotifHash = notifs.map(n => n.id).sort().join(','); sendToAll({ notifications: notifs }); }
   res.json({ success: ok });
 });
 
@@ -412,6 +438,7 @@ app.get('/api/status', (_req, res) => res.json({
   mcp:          { connected:!!mcpClient, tools:mcpTools.length, url:MCP_SERVER_URL||'미설정', secretKey:MCP_SECRET_KEY?'✓':'미설정' },
   notifClients: notifClients.size,
   notifSystem:  { sheet:NOTIF_SHEET, poll:'5s SSE', auth:'GCP ADC (SA)' },
+  video_ss:     VIDEO_SS_ID,
 }));
 
 app.post('/api/reload-knowledge', async (_req, res) => {
@@ -426,12 +453,11 @@ app.post('/api/reconnect-mcp', async (_req, res) => {
   res.json({ connected:!!mcpClient, tools:mcpTools.length });
 });
 
-// ──────────────────────────────────────────────────────────
 app.listen(PORT, '0.0.0.0', () => {
-  console.log(`🔱 ASTERION Hub v3.6 — port ${PORT}`);
-  console.log(`   COOP/COEP: same-origin / credentialless → SharedArrayBuffer 활성화`);
+  console.log(`🔱 ASTERION Hub v3.9.1 — port ${PORT}`);
+  console.log(`   TTS    : VITS 70-speaker (ORI-Muchim)`);
+  console.log(`   Sync   : /api/sync-source-files → SOURCE_FILES sheet`);
   console.log(`   Claude : ${CLAUDE_MODEL} | Native MCP ${CLAUDE_KEY?'✓':'✗'}`);
-  console.log(`   Gemini : ${GEMINI_MODEL} | Function Calling ${GEMINI_KEY?'✓':'✗'}`);
+  console.log(`   Gemini : ${GEMINI_MODEL} | ${GEMINI_KEY?'✓':'✗'}`);
   console.log(`   MCP    : ${MCP_SERVER_URL||'미설정'} | tools:${mcpTools.length}`);
-  console.log(`   Notif  : BTRNotifications SSE poll (5s) | GCP ADC`);
 });
