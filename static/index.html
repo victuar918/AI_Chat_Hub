@@ -9,7 +9,6 @@
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css" crossorigin="anonymous"/>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/9.1.6/marked.min.js" crossorigin="anonymous"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js" crossorigin="anonymous"></script>
-<!-- lamejs: Float32 PCM → MP3 인코딩 -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/lamejs/1.2.1/lame.min.js" crossorigin="anonymous"></script>
 <style>
 :root{--gold:#c9a96e;--gold-lt:#e8d5a3;--gold-a:rgba(201,169,110,.14);--gold-b:rgba(201,169,110,.07);--bg:#080604;--bg1:#0e0b07;--bg2:#161210;--bg3:#1e1a14;--bdr:rgba(201,169,110,.20);--bdr2:rgba(201,169,110,.09);--tx:#ddd0b8;--tx2:#a08c6e;--tx3:#6b5c44;--green:#5a8a6a;--red:#9a5040;--btr-c:rgba(180,100,50,.20);--btr-b:rgba(200,120,60,.35);--btr-tx:rgba(230,150,80,.95);}
@@ -29,7 +28,7 @@ body{height:100dvh;background:var(--bg);color:var(--tx);font-family:'Noto Sans K
 #btr-panel{background:var(--bg1);border-bottom:1px solid var(--btr-b);flex-shrink:0;max-height:0;overflow:hidden;transition:max-height .3s ease;}#btr-panel.open{max-height:70dvh;overflow-y:auto;}
 #btr-panel-hdr{display:flex;align-items:center;justify-content:space-between;padding:10px 14px 8px;border-bottom:1px solid var(--bdr2);}#btr-panel-hdr .btr-title{font-family:'Cinzel',serif;font-size:10px;letter-spacing:2px;color:var(--btr-tx);}
 #btr-close{background:none;border:none;color:var(--tx3);font-size:12px;cursor:pointer;padding:4px 8px;border-radius:8px;font-family:'Cinzel',serif;letter-spacing:1px;}#btr-close:hover{color:var(--tx2)}
-#btr-empty{padding:24px 14px;text-align:center;font-size:12px;color:var(--tx3);font-family:'Cinzel',serif;letter-spacing:1px;}#btr-cards{padding:8px 14px 14px;}
+#btr-cards{padding:8px 14px 14px;}
 .nc{background:var(--bg2);border:1px solid var(--btr-b);border-radius:10px;margin-bottom:10px;overflow:hidden;}
 .nc-hdr{display:flex;align-items:center;justify-content:space-between;padding:10px 12px 8px;border-bottom:1px solid var(--bdr2);}.nc-meta{display:flex;align-items:center;gap:6px;}.nc-type{background:var(--btr-c);color:var(--btr-tx);border-radius:10px;padding:2px 8px;font-size:9px;font-family:'Cinzel',serif;letter-spacing:1px;border:1px solid var(--btr-b);}.nc-session{font-size:10px;color:var(--tx3);font-family:'JetBrains Mono',monospace;}.nc-time{font-size:9px;color:var(--tx3);font-family:'JetBrains Mono',monospace;}
 .nc-dismiss{background:none;border:none;color:var(--tx3);font-size:15px;cursor:pointer;padding:2px 6px;border-radius:6px;transition:color .18s;line-height:1;}.nc-dismiss:hover{color:var(--red)}
@@ -39,7 +38,6 @@ body{height:100dvh;background:var(--bg);color:var(--tx);font-family:'Noto Sans K
 .nc-send{background:var(--btr-c);border:1px solid var(--btr-b);color:var(--btr-tx);border-radius:8px;padding:7px 14px;font-size:11px;cursor:pointer;font-family:'Cinzel',serif;letter-spacing:1px;transition:all .18s;white-space:nowrap;flex-shrink:0;}.nc-send:hover{background:rgba(180,100,50,.32)}
 .nc-confirm{display:none;background:rgba(8,6,4,.92);border-top:1px solid var(--red);padding:12px;text-align:center;}.nc-confirm.show{display:block}.nc-confirm p{font-size:12px;color:var(--tx2);margin-bottom:10px;}
 .nc-confirm-btns{display:flex;gap:8px;justify-content:center;}.nc-yes{background:rgba(154,80,64,.25);border:1px solid rgba(154,80,64,.5);color:var(--red);padding:5px 16px;border-radius:8px;cursor:pointer;font-size:11px;font-family:'Cinzel',serif;letter-spacing:1px;}.nc-no{background:var(--bg3);border:1px solid var(--bdr);color:var(--tx3);padding:5px 16px;border-radius:8px;cursor:pointer;font-size:11px;font-family:'Cinzel',serif;letter-spacing:1px;}
-/* 대화 기록 패널 */
 #hist-panel{background:var(--bg1);border-bottom:1px solid var(--bdr);flex-shrink:0;max-height:0;overflow:hidden;transition:max-height .3s ease;}
 #hist-panel.open{max-height:60dvh;overflow-y:auto;}
 #hist-panel-hdr{display:flex;align-items:center;justify-content:space-between;padding:10px 14px 8px;border-bottom:1px solid var(--bdr2);}
@@ -69,6 +67,12 @@ body{height:100dvh;background:var(--bg);color:var(--tx);font-family:'Noto Sans K
 .modal-btn{border-radius:10px;padding:7px 18px;font-size:10px;cursor:pointer;font-family:'Cinzel',serif;letter-spacing:1px;transition:all .18s;border:1px solid var(--bdr2);}
 .modal-btn.cancel{background:var(--bg3);color:var(--tx3);}.modal-btn.cancel:hover{border-color:var(--bdr);color:var(--tx2)}
 .modal-btn.create{background:var(--gold-a);color:var(--gold);border-color:rgba(201,169,110,.3);}.modal-btn.create:hover{background:rgba(201,169,110,.22);}.modal-btn.create:disabled{opacity:.4;cursor:default}
+/* 화자 탐색기 */
+.speaker-nav{display:flex;align-items:center;gap:4px;flex:1;justify-content:flex-end;}
+.spk-btn{background:var(--bg3);border:1px solid var(--bdr2);color:var(--tx2);border-radius:6px;padding:4px 8px;font-size:10px;cursor:pointer;font-family:'JetBrains Mono',monospace;transition:all .18s;line-height:1;}.spk-btn:hover{border-color:var(--gold);color:var(--gold)}
+.spk-display{background:var(--bg);border:1px solid var(--gold);border-radius:8px;padding:4px 14px;font-family:'JetBrains Mono',monospace;font-size:14px;color:var(--gold);min-width:48px;text-align:center;}
+.spk-fav-row{display:flex;flex-wrap:wrap;gap:5px;margin-top:6px;}
+.spk-fav{background:var(--bg3);border:1px solid var(--bdr2);border-radius:8px;padding:3px 9px;font-size:10px;color:var(--tx3);cursor:pointer;font-family:'JetBrains Mono',monospace;transition:all .18s;}.spk-fav:hover{border-color:var(--gold);color:var(--gold)}.spk-fav.active{background:var(--gold-a);border-color:rgba(201,169,110,.35);color:var(--gold)}
 #msgs{flex:1;overflow-y:auto;padding:16px 0 8px;-webkit-overflow-scrolling:touch}
 #empty{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100%;gap:12px;padding:40px 20px;}
 .e-star{font-family:'Cinzel',serif;font-size:26px;letter-spacing:6px;color:rgba(201,169,110,.18)}.e-name{font-family:'Cinzel',serif;font-size:9px;letter-spacing:4px;color:rgba(201,169,110,.13)}
@@ -98,11 +102,9 @@ body{height:100dvh;background:var(--bg);color:var(--tx);font-family:'Noto Sans K
 .sp-section{margin-bottom:18px}.sp-title{font-family:'Cinzel',serif;font-size:9px;letter-spacing:2px;color:var(--gold);margin-bottom:8px;padding-bottom:4px;border-bottom:1px solid var(--bdr2);display:flex;align-items:center;gap:8px;}
 .sp-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;gap:8px;}.sp-label{font-size:11px;color:var(--tx2);flex-shrink:0}.sp-val{font-size:11px;color:var(--tx3);font-family:'JetBrains Mono',monospace;min-width:36px;text-align:right;flex-shrink:0}
 input[type=range]{-webkit-appearance:none;flex:1;height:3px;background:var(--bdr);border-radius:2px;outline:none;}input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:16px;height:16px;border-radius:50%;background:var(--gold);cursor:pointer;}
-select{background:var(--bg2);border:1px solid var(--bdr);color:var(--tx2);border-radius:6px;padding:4px 8px;font-size:11px;outline:none;font-family:'JetBrains Mono',monospace;}
 .sp-btn{background:var(--bg3);border:1px solid var(--bdr2);border-radius:10px;padding:5px 14px;font-size:10px;color:var(--tx3);cursor:pointer;font-family:'Cinzel',serif;letter-spacing:1px;transition:all .18s;white-space:nowrap;}.sp-btn:hover{border-color:var(--gold);color:var(--gold)}.sp-btn.playing{background:var(--gold-a);border-color:rgba(201,169,110,.35);color:var(--gold)}.sp-btn.danger{border-color:rgba(154,80,64,.35)}.sp-btn.danger:hover{border-color:var(--red);color:var(--red)}.sp-btn:disabled{opacity:.4;cursor:default}
 .sp-badge{background:var(--gold-b);border:1px solid var(--bdr2);border-radius:8px;padding:2px 8px;font-size:9px;color:var(--tx3);font-family:'Cinzel',serif;letter-spacing:1px;}.sp-badge.ready{background:rgba(90,138,106,.12);border-color:rgba(90,138,106,.3);color:var(--green);}.sp-badge.loading{background:rgba(201,169,110,.1);border-color:rgba(201,169,110,.25);color:var(--gold);}.sp-badge.error{background:rgba(154,80,64,.12);border-color:rgba(154,80,64,.3);color:var(--red);}
 .sp-info{font-size:11px;color:var(--tx3);line-height:1.7;padding:4px 0}.sp-info a{color:var(--gold);text-decoration:none}
-.sp-mono{font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--tx3);background:var(--bg3);border:1px solid var(--bdr2);border-radius:4px;padding:4px 8px;margin-top:4px;word-break:break-all;line-height:1.6;}
 #ctrl{background:var(--bg1);border-top:1px solid var(--bdr2);padding:8px 14px 0;display:flex;align-items:center;gap:6px;flex-shrink:0;overflow-x:auto;-webkit-overflow-scrolling:touch;}#ctrl::-webkit-scrollbar{display:none}
 .cbtn{background:var(--bg2);border:1px solid var(--bdr2);border-radius:16px;padding:5px 11px;font-size:11px;color:var(--tx3);cursor:pointer;font-family:'Cinzel',serif;letter-spacing:1px;transition:all .18s;white-space:nowrap;flex-shrink:0;}.cbtn:hover{border-color:var(--bdr);color:var(--tx2)}.cbtn.on{background:var(--gold-a);color:var(--gold);border-color:rgba(201,169,110,.3)}.cbtn.on-red{background:rgba(154,80,64,.15);color:var(--red);border-color:rgba(154,80,64,.3)}
 #kb-chip{display:flex;align-items:center;gap:5px;background:var(--bg2);border:1px solid var(--bdr2);border-radius:16px;padding:5px 10px;font-size:11px;color:var(--tx3);cursor:pointer;transition:all .18s;white-space:nowrap;flex-shrink:0;}#kb-dot{width:6px;height:6px;border-radius:50%;background:var(--tx3);flex-shrink:0}
@@ -138,12 +140,12 @@ select{background:var(--bg2);border:1px solid var(--bdr);color:var(--tx2);border
   <div id="hist-empty" style="display:none;padding:20px 14px;text-align:center;font-size:12px;color:var(--tx3);font-family:'Cinzel',serif;letter-spacing:1px;">저장된 대화가 없습니다</div>
 </div>
 
-<!-- MP3 저장 모달 -->
+<!-- MP3 모달 -->
 <div id="mp3-modal">
   <div class="modal-overlay" onclick="closeMp3Modal()"></div>
   <div class="modal-box">
     <div class="modal-hdr">
-      <span class="modal-hdr-title">🎵 MP3 저장</span>
+      <span class="modal-hdr-title">🎵 MP3 저장 — 화자 <span id="mp3-speaker-label">0</span>번</span>
       <button class="modal-hdr-close" onclick="closeMp3Modal()">✕</button>
     </div>
     <div class="modal-body">
@@ -180,39 +182,63 @@ select{background:var(--bg2);border:1px solid var(--bdr);color:var(--tx2);border
 <div id="sys-panel"><textarea id="sys-ta" placeholder="추가 시스템 지시 (기본 프롬프트에 append)"></textarea></div>
 
 <div id="settings-panel">
-  <!-- TTS v5.1 — 자동 로드, Web Speech 제거 -->
+  <!-- VITS 70-Speaker TTS v1.0 -->
   <div class="sp-section">
-    <div class="sp-title">🎙 Supertonic TTS <span class="sp-badge" id="st-badge">로딩 중...</span></div>
-    <div class="sp-info" id="st-status-msg">앱 진입 시 자동 로드됩니다. 첫 실행 후 캐시됩니다.</div>
-    <div class="sp-mono" id="st-model-names" style="display:none"></div>
-    <div class="sp-row" style="gap:8px;margin-bottom:10px;">
-      <button class="sp-btn" id="st-test-btn" onclick="testTts()">▶ 테스트 재생</button>
-      <button class="sp-btn" onclick="openMp3Modal()">🎵 MP3 저장</button>
+    <div class="sp-title">🎙 VITS 70-Speaker TTS <span class="sp-badge" id="st-badge">로딩 중...</span></div>
+
+    <!-- 모델 상태 -->
+    <div class="sp-info" id="st-status-msg">앱 진입 시 자동 로드 (약 300~500MB · 최초 1회)</div>
+
+    <!-- 액션 버튼 행 -->
+    <div class="sp-row" style="gap:6px;margin-bottom:10px;flex-wrap:wrap;">
+      <button class="sp-btn" id="st-test-btn" onclick="testTts()">▶ 테스트</button>
+      <button class="sp-btn" onclick="openMp3Modal()">🎵 MP3</button>
       <button class="sp-btn" id="st-reload-btn" onclick="reloadTts()" style="display:none">↺ 재로드</button>
     </div>
+
+    <!-- 화자 탐색기 -->
     <div class="sp-row">
-      <span class="sp-label">화자</span>
-      <select id="st-voice" onchange="saveTtsPref()">
-        <option value="F1">F1 — 여성 1</option><option value="F2">F2 — 여성 2</option>
-        <option value="F3">F3 — 여성 3</option><option value="F4">F4 — 여성 4</option>
-        <option value="F5">F5 — 여성 5</option><option value="M1">M1 — 남성 1</option>
-        <option value="M2">M2 — 남성 2</option><option value="M3">M3 — 남성 3</option>
-        <option value="M4">M4 — 남성 4</option><option value="M5">M5 — 남성 5</option>
-      </select>
+      <span class="sp-label">화자 ID (0–69)</span>
+      <div class="speaker-nav">
+        <button class="spk-btn" onclick="changeSpeaker(-10)">-10</button>
+        <button class="spk-btn" onclick="changeSpeaker(-1)">-1</button>
+        <span class="spk-display" id="spk-display">0</span>
+        <button class="spk-btn" onclick="changeSpeaker(+1)">+1</button>
+        <button class="spk-btn" onclick="changeSpeaker(+10)">+10</button>
+      </div>
     </div>
-    <div class="sp-row"><span class="sp-label">품질(스텝)</span><input type="range" id="st-steps" min="1" max="20" step="1" value="5" oninput="updateStepsVal()"/><span class="sp-val" id="st-steps-val">5</span></div>
-    <div class="sp-row"><span class="sp-label">속도</span><input type="range" id="tts-speed" min="0.8" max="1.5" step="0.05" value="1.0" oninput="updateSpeedVal()"/><span class="sp-val" id="tts-speed-val">1.00x</span></div>
+
+    <!-- 즐겨찾기 화자 -->
+    <div class="sp-label" style="font-size:10px;color:var(--tx3);margin-bottom:4px;">즐겨찾기 (현재 화자 길게 누르면 추가)</div>
+    <div class="spk-fav-row" id="spk-favs"></div>
+
+    <!-- 속도 -->
+    <div class="sp-row" style="margin-top:8px;">
+      <span class="sp-label">속도</span>
+      <input type="range" id="tts-speed" min="0.5" max="1.5" step="0.05" value="1.0" oninput="updateSpeedVal()"/>
+      <span class="sp-val" id="tts-speed-val">1.00x</span>
+    </div>
+
+    <!-- 노이즈 스케일 (감정 자연스러움) -->
+    <div class="sp-row">
+      <span class="sp-label">노이즈 스케일</span>
+      <input type="range" id="tts-noise" min="0.1" max="1.0" step="0.05" value="0.667" oninput="updateNoiseVal()"/>
+      <span class="sp-val" id="tts-noise-val">0.67</span>
+    </div>
+
     <div class="sp-info" style="margin-top:4px;font-size:10px;">
-      <a href="https://huggingface.co/onnx-community/Supertonic-TTS-2-ONNX" target="_blank">Supertonic-TTS-2-ONNX</a>
-      · ko/en · 44.1kHz · WebGPU/WASM · 순차처리(드롭아웃 방지)
+      <a href="https://huggingface.co/ORI-Muchim/VITS_multi_speaker_fine_tuning" target="_blank">ORI-Muchim/VITS_multi_speaker_fine_tuning</a>
+      · 한국어 70화자 · WebGPU/WASM · 노이즈 스케일 ↑ = 더 자연스러운 감정 표현
     </div>
   </div>
+
   <!-- 대화 기록 -->
   <div class="sp-section">
     <div class="sp-title">💬 대화 기록</div>
     <div class="sp-info">최근 30개 자동 저장 · 새로고침 후 복원</div>
     <div class="sp-row" style="margin-top:6px;"><button class="sp-btn danger" onclick="clearAllHistory()">🗑 전체 삭제</button></div>
   </div>
+
   <!-- 알림 -->
   <div class="sp-section">
     <div class="sp-title">📡 알림 시스템</div>
@@ -238,7 +264,8 @@ select{background:var(--bg2);border:1px solid var(--bdr);color:var(--tx2);border
 
 <script>
 const S={model:'claude',messages:[],streaming:false,freestyle:false,currentConvId:null};
-const STP={steps:5,speed:1.0,voice:'F1'};
+// TTS 설정 — VITS 70-Speaker
+const STP={speakerId:0,speed:1.0,noiseScale:0.667,favorites:[]};
 let pendingNotifs=[],btrOpen=false,histOpen=false,sseConn=null;
 const MODEL_STYLE={
   claude:{avClass:'a-claude',whoClass:'claude',label:'CLAUDE',icon:'✦'},
@@ -246,127 +273,105 @@ const MODEL_STYLE={
 };
 
 // ══ 대화 기록 ══
-const CONV_KEY='ah-conversations-v1', PREF_KEY='ah-v50';
-const MAX_CONVS=30, MAX_MSGS=120;
+const CONV_KEY='ah-conversations-v1',PREF_KEY='ah-v50';
+const MAX_CONVS=30,MAX_MSGS=120;
 function genConvId(){return 'conv-'+Date.now()+'-'+Math.random().toString(36).slice(2,6);}
-function loadConversations(){try{return JSON.parse(localStorage.getItem(CONV_KEY)||'{}');}catch{return {};}}
-function saveConversations(convs){try{localStorage.setItem(CONV_KEY,JSON.stringify(convs));}catch(e){const sorted=Object.values(convs).sort((a,b)=>a.updated_at>b.updated_at?1:-1);sorted.slice(0,Math.floor(sorted.length/2)).forEach(c=>delete convs[c.id]);try{localStorage.setItem(CONV_KEY,JSON.stringify(convs));}catch(_){}}}
-function autoSave(){
-  if(!S.messages.length)return;
-  if(!S.currentConvId)S.currentConvId=genConvId();
-  const convs=loadConversations();
-  const firstUser=S.messages.find(m=>m.role==='user')?.content||'새 대화';
-  const title=firstUser.slice(0,30)+(firstUser.length>30?'…':'');
-  const existing=convs[S.currentConvId];
-  convs[S.currentConvId]={id:S.currentConvId,title,model:S.model,messages:S.messages.slice(-MAX_MSGS),created_at:existing?.created_at||new Date().toISOString(),updated_at:new Date().toISOString()};
-  const sorted=Object.values(convs).sort((a,b)=>b.updated_at>a.updated_at?1:-1);
-  const trimmed={};sorted.slice(0,MAX_CONVS).forEach(c=>trimmed[c.id]=c);
-  saveConversations(trimmed);
-}
-function loadConversation(id){
-  const convs=loadConversations(),conv=convs[id];if(!conv)return;
-  if(S.messages.length)autoSave();
-  S.messages=conv.messages||[];S.currentConvId=id;
-  setModel(conv.model||S.model,false);
-  const msgsEl=document.getElementById('msgs');msgsEl.innerHTML='';
-  S.messages.forEach(m=>{
-    if(m.role==='user')appendMsg('user',m.content);
-    else if(m.role==='assistant')appendMsg('assistant',m.content);
-  });
-  if(!S.messages.length)msgsEl.innerHTML=emptyHTML();
-  if(histOpen)toggleHistory();
-  toast('대화 로드됨: '+conv.title.slice(0,20));
-  renderHistoryList();
-}
-function deleteConversation(id,e){
-  e.stopPropagation();const convs=loadConversations();delete convs[id];saveConversations(convs);
-  if(S.currentConvId===id){S.messages=[];S.currentConvId=null;document.getElementById('msgs').innerHTML=emptyHTML();}
-  renderHistoryList();
-}
-function renderHistoryList(){
-  const convs=loadConversations(),list=document.getElementById('hist-list'),empty=document.getElementById('hist-empty');
-  const sorted=Object.values(convs).sort((a,b)=>b.updated_at>a.updated_at?1:-1);
-  if(!sorted.length){list.innerHTML='';empty.style.display='block';return;}
-  empty.style.display='none';
-  const ICON={claude:'✦',gemini:'◈'};
-  list.innerHTML=sorted.map(c=>{
-    const dt=new Date(c.updated_at),ds=dt.toLocaleDateString('ko-KR',{month:'2-digit',day:'2-digit'})+' '+dt.toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'});
-    return`<div class="hitem${c.id===S.currentConvId?' active':''}" onclick="loadConversation('${c.id}')"><span class="hitem-icon">${ICON[c.model]||'◇'}</span><div class="hitem-body"><div class="hitem-title">${esc(c.title)}</div><div class="hitem-meta">${ds} · ${c.messages?.length||0}개</div></div><button class="hitem-del" onclick="deleteConversation('${c.id}',event)">✕</button></div>`;
-  }).join('');
-}
-function toggleHistory(){
-  histOpen=!histOpen;
-  document.getElementById('hist-panel').classList.toggle('open',histOpen);
-  document.getElementById('hist-btn').classList.toggle('on',histOpen);
-  if(histOpen){renderHistoryList();closeOtherPanels('hist');}
-}
-function clearAllHistory(){
-  if(!confirm('저장된 모든 대화를 삭제하시겠습니까?'))return;
-  localStorage.removeItem(CONV_KEY);S.messages=[];S.currentConvId=null;
-  document.getElementById('msgs').innerHTML=emptyHTML();renderHistoryList();toast('전체 대화 기록 삭제됨');
-}
+function loadConversations(){try{return JSON.parse(localStorage.getItem(CONV_KEY)||'{}');}catch{return{};}}
+function saveConversations(convs){try{localStorage.setItem(CONV_KEY,JSON.stringify(convs));}catch(e){const s=Object.values(convs).sort((a,b)=>a.updated_at>b.updated_at?1:-1);s.slice(0,Math.floor(s.length/2)).forEach(c=>delete convs[c.id]);try{localStorage.setItem(CONV_KEY,JSON.stringify(convs));}catch(_){}}}
+function autoSave(){if(!S.messages.length)return;if(!S.currentConvId)S.currentConvId=genConvId();const convs=loadConversations();const fu=S.messages.find(m=>m.role==='user')?.content||'새 대화';const title=fu.slice(0,30)+(fu.length>30?'…':'');const ex=convs[S.currentConvId];convs[S.currentConvId]={id:S.currentConvId,title,model:S.model,messages:S.messages.slice(-MAX_MSGS),created_at:ex?.created_at||new Date().toISOString(),updated_at:new Date().toISOString()};const sorted=Object.values(convs).sort((a,b)=>b.updated_at>a.updated_at?1:-1);const trimmed={};sorted.slice(0,MAX_CONVS).forEach(c=>trimmed[c.id]=c);saveConversations(trimmed);}
+function loadConversation(id){const convs=loadConversations(),conv=convs[id];if(!conv)return;if(S.messages.length)autoSave();S.messages=conv.messages||[];S.currentConvId=id;setModel(conv.model||S.model,false);const m=document.getElementById('msgs');m.innerHTML='';S.messages.forEach(msg=>{if(msg.role==='user')appendMsg('user',msg.content);else if(msg.role==='assistant')appendMsg('assistant',msg.content);});if(!S.messages.length)m.innerHTML=emptyHTML();if(histOpen)toggleHistory();toast('대화 로드됨: '+conv.title.slice(0,20));renderHistoryList();}
+function deleteConversation(id,e){e.stopPropagation();const convs=loadConversations();delete convs[id];saveConversations(convs);if(S.currentConvId===id){S.messages=[];S.currentConvId=null;document.getElementById('msgs').innerHTML=emptyHTML();}renderHistoryList();}
+function renderHistoryList(){const convs=loadConversations(),list=document.getElementById('hist-list'),empty=document.getElementById('hist-empty');const sorted=Object.values(convs).sort((a,b)=>b.updated_at>a.updated_at?1:-1);if(!sorted.length){list.innerHTML='';empty.style.display='block';return;}empty.style.display='none';const ICON={claude:'✦',gemini:'◈'};list.innerHTML=sorted.map(c=>{const dt=new Date(c.updated_at),ds=dt.toLocaleDateString('ko-KR',{month:'2-digit',day:'2-digit'})+' '+dt.toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'});return`<div class="hitem${c.id===S.currentConvId?' active':''}" onclick="loadConversation('${c.id}')"><span class="hitem-icon">${ICON[c.model]||'◇'}</span><div class="hitem-body"><div class="hitem-title">${esc(c.title)}</div><div class="hitem-meta">${ds} · ${c.messages?.length||0}개</div></div><button class="hitem-del" onclick="deleteConversation('${c.id}',event)">✕</button></div>`;}).join('');}
+function toggleHistory(){histOpen=!histOpen;document.getElementById('hist-panel').classList.toggle('open',histOpen);document.getElementById('hist-btn').classList.toggle('on',histOpen);if(histOpen){renderHistoryList();closeOtherPanels('hist');}}
+function clearAllHistory(){if(!confirm('저장된 모든 대화를 삭제하시겠습니까?'))return;localStorage.removeItem(CONV_KEY);S.messages=[];S.currentConvId=null;document.getElementById('msgs').innerHTML=emptyHTML();renderHistoryList();toast('전체 대화 기록 삭제됨');}
 
-// ══ SUPERTONIC TTS v5.2 ══
-// v5.2 개선:
-//   ✅ 자동 로드 (앱 진입 시 백그라운드, 버튼 불필요)
-//   ✅ 재진입 후에도 기존 채팅 재생 버튼 유지 (appendMsg에서 자동 추가)
-//   ✅ Web Speech 제거
-//   ✅ 랜덤 누락 수정: 파이프라인 오버랩 제거 → 완전 순차 처리
-//     (합성N+1 시작 시 GPU가 합성N+재생N 두 작업을 동시 처리 → 랜덤 드롭아웃 발생
-//      수정: synthN 완료 → playN → synthN+1 → playN+1 순서)
-//   ✅ MP3 저장 기능 추가 (lamejs 128kbps)
+// ══ VITS 70-Speaker TTS v1.0 ══
+// 모델: ORI-Muchim/VITS_multi_speaker_fine_tuning
+// 특징: 한국어 네이티브 · 70화자 · 언어태그 불필요 · 추론스텝 없음
+// 감정 표현: speakerId 선택 + noiseScale(0.1~1.0) 조합
 const TF_CDN='https://cdn.jsdelivr.net/npm/@huggingface/transformers@3/dist/transformers.min.js';
-const TF_MODEL='onnx-community/Supertonic-TTS-2-ONNX';
-const VOICE_BASE='https://huggingface.co/onnx-community/Supertonic-TTS-2-ONNX/resolve/main/voices/';
+const VITS_MODEL='ORI-Muchim/VITS_multi_speaker_fine_tuning';
+const TOTAL_SPEAKERS=70;
 let stPipeline=null,stReady=false,stLoading=false;
 let activeTtsStop=false,activeTtsCtx=null,detectedEP='WASM';
 
-function wrapLangTag(text){
-  if(/[\uAC00-\uD7A3]/.test(text))return`<ko>${text}</ko>`;
-  if(/[\u3040-\u30FF\u4E00-\u9FFF]/.test(text))return`<ja>${text}</ja>`;
-  return`<en>${text}</en>`;
-}
-
-// 자동 로드 (init에서 호출, 실패 시 재로드 버튼 표시)
-async function loadSupertonicModel(showToast=true){
+async function loadVitsModel(showToast=true){
   if(stLoading)return;if(stReady&&showToast){toast('이미 로드됨 ✓');return;}
   stLoading=true;setStBadge('loading','로딩 중...');
-  showTtsProgress('Supertonic 초기화 중...');
+  showTtsProgress('VITS 초기화 중...');
   try{
     const{pipeline}=await import(TF_CDN);
     let device='wasm';
     if(navigator.gpu){try{const a=await navigator.gpu.requestAdapter();if(a)device='webgpu';}catch(_){}}
-    showTtsProgress(`모델 다운로드 [${device.toUpperCase()}]...`);
-    stPipeline=await pipeline('text-to-speech',TF_MODEL,{device,progress_callback:(p)=>{
-      if(!p)return;
-      if(p.status==='downloading'&&p.file){const pct=p.progress?Math.round(p.progress)+'%':'...';showTtsProgress(`⬇ ${p.file.split('/').pop()} (${pct})`);}
-      else if(p.status==='loading'&&p.file)showTtsProgress(`🔧 ${p.file.split('/').pop()}`);
-    }});
-    detectedEP=device.toUpperCase();stReady=true;
-    setStBadge('ready','준비됨 ✓');
-    const nm=document.getElementById('st-model-names');nm.style.display='block';
-    nm.textContent=`EP: ${device.toUpperCase()} | ${TF_MODEL}\n44100Hz · 순차처리 · 드롭아웃 방지`;
-    document.getElementById('st-status-msg').textContent=`자동 로드 완료 [${device.toUpperCase()}]. 한국어 ✓`;
-    document.getElementById('st-reload-btn').style.display='none';
-    if(showToast)toast(`✅ TTS 준비 완료 [${device.toUpperCase()}]`);
-    // 기존 채팅의 재생 버튼에 TTS 활성화 반영
-    document.querySelectorAll('.tts-btn').forEach(btn=>{
-      if(btn.innerHTML==='▶ 재생')btn.style.opacity='1';
+    showTtsProgress(`모델 다운로드 [${device.toUpperCase()}]... (300~500MB)`);
+    stPipeline=await pipeline('text-to-speech',VITS_MODEL,{
+      device,
+      progress_callback:(p)=>{
+        if(!p)return;
+        if(p.status==='downloading'&&p.file){
+          const pct=p.progress?Math.round(p.progress)+'%':'...';
+          showTtsProgress(`⬇ ${p.file.split('/').pop()} (${pct})`);
+        }else if(p.status==='loading'&&p.file){
+          showTtsProgress(`🔧 ${p.file.split('/').pop()}`);
+        }
+      }
     });
+    detectedEP=device.toUpperCase();stReady=true;
+    setStBadge('ready',`준비됨 · ${TOTAL_SPEAKERS}화자`);
+    document.getElementById('st-status-msg').textContent=`로드 완료 [${device.toUpperCase()}] · 화자 0~69번 즉시 전환 가능`;
+    document.getElementById('st-reload-btn').style.display='none';
+    if(showToast)toast(`✅ VITS ${TOTAL_SPEAKERS}화자 로드 완료 [${device.toUpperCase()}]`);
   }catch(e){
     stReady=false;setStBadge('error','오류');
     document.getElementById('st-status-msg').textContent='로드 실패: '+e.message;
     document.getElementById('st-reload-btn').style.display='inline-block';
-    console.error('[TTS v5.2]',e);
+    console.error('[VITS TTS]',e);
   }
   hideTtsProgress();stLoading=false;
 }
-function reloadTts(){stReady=false;stPipeline=null;loadSupertonicModel(true);}
+function reloadTts(){stReady=false;stPipeline=null;loadVitsModel(true);}
 
-async function synthSupertonic(text,voice,steps,speed){
+// 화자 변경
+function changeSpeaker(delta){
+  STP.speakerId=Math.max(0,Math.min(TOTAL_SPEAKERS-1,(STP.speakerId+delta+TOTAL_SPEAKERS)%TOTAL_SPEAKERS));
+  updateSpeakerUI();save();
+}
+function updateSpeakerUI(){
+  document.getElementById('spk-display').textContent=STP.speakerId;
+  document.getElementById('mp3-speaker-label').textContent=STP.speakerId;
+  // 즐겨찾기 활성화 표시
+  document.querySelectorAll('.spk-fav').forEach(el=>{
+    el.classList.toggle('active',parseInt(el.dataset.id)===STP.speakerId);
+  });
+}
+
+// 즐겨찾기
+function renderFavorites(){
+  const container=document.getElementById('spk-favs');
+  if(!STP.favorites.length){container.innerHTML='<span style="font-size:10px;color:var(--tx3)">없음 (버튼 길게 누르면 추가)</span>';return;}
+  container.innerHTML=STP.favorites.map(id=>`<button class="spk-fav${id===STP.speakerId?' active':''}" data-id="${id}" onclick="selectFav(${id})" oncontextmenu="removeFav(${id},event)">${id}</button>`).join('');
+}
+function selectFav(id){STP.speakerId=id;updateSpeakerUI();save();}
+function removeFav(id,e){e.preventDefault();STP.favorites=STP.favorites.filter(f=>f!==id);renderFavorites();save();}
+// 현재 화자 즐겨찾기 추가 (테스트 버튼 길게 누르기)
+function addCurrentFav(){
+  if(!STP.favorites.includes(STP.speakerId)){
+    STP.favorites.push(STP.speakerId);
+    STP.favorites.sort((a,b)=>a-b);
+    renderFavorites();save();
+    toast(`화자 ${STP.speakerId}번 즐겨찾기 추가됨`);
+  }
+}
+
+// 합성
+async function synthVits(text){
   if(!stReady||!stPipeline)throw new Error('엔진 미준비');
-  const result=await stPipeline(wrapLangTag(text),{speaker_embeddings:VOICE_BASE+voice+'.bin',num_inference_steps:steps,speed});
-  return{samples:Float32Array.from(result.audio),sampleRate:result.sampling_rate||44100};
+  const result=await stPipeline(text,{
+    speaker_id:STP.speakerId,
+    speaking_rate:STP.speed,
+    noise_scale:STP.noiseScale
+  });
+  return{samples:Float32Array.from(result.audio),sampleRate:result.sampling_rate||22050};
 }
 
 function float32ToWav(s,sr){
@@ -388,162 +393,122 @@ async function playChunk(samples,sampleRate){
     if(activeTtsStop){ctx.close();return;}
     const src=ctx.createBufferSource();src.buffer=ab;src.connect(ctx.destination);src.start();
     await new Promise(res=>{src.onended=res;});
-  }catch(e){console.warn('[TTS playChunk]',e);}
+  }catch(e){console.warn('[VITS playChunk]',e);}
   finally{try{ctx.close();}catch(_){}if(activeTtsCtx===ctx)activeTtsCtx=null;}
 }
 function splitTextChunks(text){
-  const maxLen=150;
+  const maxLen=120;
   const sentences=text.match(/[^.!?。！？\n]+[.!?。！？\n]?/g)||[text];
   const chunks=[];let cur='';
-  for(const s of sentences){if(cur.length+s.length>maxLen&&cur.length>0){if(cur.trim())chunks.push(cur.trim());cur=s;}else{cur+=s;}}
+  for(const s of sentences){if(cur.length+s.length>maxLen&&cur.length>0){if(cur.trim())chunks.push(cur.trim());cur=s;}else cur+=s;}
   if(cur.trim())chunks.push(cur.trim());
   return chunks.filter(c=>c.length>0);
 }
 
-// ★ v5.2 핵심 수정: 완전 순차 처리 (오버랩 제거 → 드롭아웃 방지)
+// 완전 순차 처리 (드롭아웃 방지)
 async function speakText(text,btnEl){
-  if(WS_activeBtn===btnEl){
-    activeTtsStop=true;
-    if(activeTtsCtx){try{activeTtsCtx.close();}catch(_){}}
-    activeTtsCtx=null;WS_activeBtn=null;resetBtn(btnEl);return;
+  if(activeBtn===btnEl){
+    activeTtsStop=true;if(activeTtsCtx){try{activeTtsCtx.close();}catch(_){}}
+    activeTtsCtx=null;activeBtn=null;resetBtn(btnEl);return;
   }
-  if(WS_activeBtn){
-    activeTtsStop=true;
-    if(activeTtsCtx){try{activeTtsCtx.close();}catch(_){}}
-    activeTtsCtx=null;resetBtn(WS_activeBtn);WS_activeBtn=null;
-    await new Promise(r=>setTimeout(r,100));
+  if(activeBtn){
+    activeTtsStop=true;if(activeTtsCtx){try{activeTtsCtx.close();}catch(_){}}
+    activeTtsCtx=null;resetBtn(activeBtn);activeBtn=null;
+    await new Promise(r=>setTimeout(r,80));
   }
-  if(!stReady){toast('TTS 로딩 중... 잠시 후 다시 시도해주세요');return;}
-  activeTtsStop=false;btnEl.innerHTML='⏸ 정지';btnEl.classList.add('playing');WS_activeBtn=btnEl;
+  if(!stReady){toast('TTS 로딩 중...');return;}
+  activeTtsStop=false;btnEl.innerHTML='⏸ 정지';btnEl.classList.add('playing');activeBtn=btnEl;
   const chunks=splitTextChunks(stripMd(text));if(!chunks.length){resetBtn(btnEl);return;}
   try{
-    // ★ 완전 순차: synth → play → synth → play (오버랩 없음)
     for(let i=0;i<chunks.length;i++){
       if(activeTtsStop)break;
-      showTtsProgress(`[${detectedEP}] ${i+1}/${chunks.length}`);
-      const wav=await synthSupertonic(chunks[i],STP.voice,STP.steps,STP.speed);
+      showTtsProgress(`[화자 ${STP.speakerId}] ${i+1}/${chunks.length}`);
+      const wav=await synthVits(chunks[i]);
       if(activeTtsStop)break;
       await playChunk(wav.samples,wav.sampleRate);
     }
-  }catch(e){if(!activeTtsStop){console.error('[TTS v5.2]',e);toast(String(e.message||e).slice(0,80),6000);}}
+  }catch(e){if(!activeTtsStop){console.error('[VITS]',e);toast(String(e.message||e).slice(0,80),6000);}}
   hideTtsProgress();if(!activeTtsStop)resetBtn(btnEl);
 }
-let WS_activeBtn=null;
-function resetBtn(b){if(b){b.innerHTML='▶ 재생';b.classList.remove('playing');}if(WS_activeBtn===b)WS_activeBtn=null;}
+let activeBtn=null;
+function resetBtn(b){if(b){b.innerHTML='▶ 재생';b.classList.remove('playing');}if(activeBtn===b)activeBtn=null;}
 function stripMd(t){return t.replace(/#{1,6}\s/g,'').replace(/\*\*([^*]+)\*\*/g,'$1').replace(/\*([^*]+)\*/g,'$1').replace(/`[^`]+`/g,'').replace(/\n+/g,' ').replace(/\[([^\]]+)\]\([^)]+\)/g,'$1').trim();}
-async function testTts(){const tt='안녕하세요. ASTERION 에너지 분석 시스템입니다. 한국어 테스트입니다.';if(stReady)await speakText(tt,document.getElementById('st-test-btn'));else toast('TTS 로딩 중...');}
-function updateStepsVal(){STP.steps=parseInt(document.getElementById('st-steps').value);document.getElementById('st-steps-val').textContent=STP.steps;saveTtsPref();}
-function updateSpeedVal(){STP.speed=parseFloat(document.getElementById('tts-speed').value);document.getElementById('tts-speed-val').textContent=STP.speed.toFixed(2)+'x';saveTtsPref();}
-function saveTtsPref(){STP.voice=document.getElementById('st-voice').value;STP.steps=parseInt(document.getElementById('st-steps').value);STP.speed=parseFloat(document.getElementById('tts-speed').value);save();}
+async function testTts(){
+  const tt='안녕하세요. 아스터리언입니다. 현재 화자 '+STP.speakerId+'번 테스트입니다.';
+  if(stReady)await speakText(tt,document.getElementById('st-test-btn'));
+  else toast('TTS 로딩 중...');
+}
+function updateSpeedVal(){STP.speed=parseFloat(document.getElementById('tts-speed').value);document.getElementById('tts-speed-val').textContent=STP.speed.toFixed(2)+'x';save();}
+function updateNoiseVal(){STP.noiseScale=parseFloat(document.getElementById('tts-noise').value);document.getElementById('tts-noise-val').textContent=STP.noiseScale.toFixed(2);save();}
 function setStBadge(cls,text){const el=document.getElementById('st-badge');el.className='sp-badge'+(cls?' '+cls:'');el.textContent=text;}
 function showTtsProgress(msg){const el=document.getElementById('tts-progress');el.textContent=msg;el.classList.add('show');}
 function hideTtsProgress(){document.getElementById('tts-progress').classList.remove('show');}
 
-// ══ MP3 저장 기능 (lamejs 128kbps) ══
+// ══ MP3 저장 ══
 let mp3Exporting=false;
 function openMp3Modal(){
-  if(!stReady){toast('TTS 로딩 완료 후 사용 가능합니다');return;}
+  if(!stReady){toast('TTS 로드 완료 후 사용 가능합니다');return;}
   document.getElementById('mp3-modal').classList.add('show');
   document.getElementById('mp3-ta').value='';
   document.getElementById('mp3-count').textContent='0';
   document.getElementById('mp3-progress-area').style.display='none';
   document.getElementById('mp3-create-btn').disabled=false;
+  document.getElementById('mp3-speaker-label').textContent=STP.speakerId;
   document.getElementById('mp3-ta').focus();
 }
-function closeMp3Modal(){
-  if(mp3Exporting)return;
-  document.getElementById('mp3-modal').classList.remove('show');
-}
-function updateMp3Count(){
-  document.getElementById('mp3-count').textContent=document.getElementById('mp3-ta').value.length;
-}
-function setMp3Progress(pct,label){
-  document.getElementById('mp3-prog-fill').style.width=pct+'%';
-  document.getElementById('mp3-prog-label').textContent=label;
-}
-
+function closeMp3Modal(){if(mp3Exporting)return;document.getElementById('mp3-modal').classList.remove('show');}
+function updateMp3Count(){document.getElementById('mp3-count').textContent=document.getElementById('mp3-ta').value.length;}
+function setMp3Progress(pct,label){document.getElementById('mp3-prog-fill').style.width=pct+'%';document.getElementById('mp3-prog-label').textContent=label;}
 async function startMp3Export(){
   const text=document.getElementById('mp3-ta').value.trim();
   if(!text){toast('텍스트를 입력하세요');return;}
   if(!stReady){toast('TTS 미준비');return;}
   if(mp3Exporting)return;
-  mp3Exporting=true;
-  document.getElementById('mp3-create-btn').disabled=true;
+  mp3Exporting=true;document.getElementById('mp3-create-btn').disabled=true;
   document.getElementById('mp3-progress-area').style.display='block';
   setMp3Progress(0,'텍스트 분할 중...');
-
   try{
     const chunks=splitTextChunks(text);
-    const allSamples=[];
-    let sampleRate=44100;
-
-    // 순차 합성
+    const allSamples=[];let sampleRate=22050;
     for(let i=0;i<chunks.length;i++){
-      const pct=Math.round((i/chunks.length)*70);
-      setMp3Progress(pct,`합성 중... ${i+1}/${chunks.length}`);
-      const{samples,sampleRate:sr}=await synthSupertonic(chunks[i],STP.voice,STP.steps,STP.speed);
-      allSamples.push(samples);
-      sampleRate=sr;
+      setMp3Progress(Math.round((i/chunks.length)*70),`합성 중... ${i+1}/${chunks.length} (화자 ${STP.speakerId}번)`);
+      const{samples,sampleRate:sr}=await synthVits(chunks[i]);
+      allSamples.push(samples);sampleRate=sr;
     }
-
-    // Float32Array 병합
-    setMp3Progress(72,'오디오 병합 중...');
+    setMp3Progress(72,'병합 중...');
     const totalLen=allSamples.reduce((sum,s)=>sum+s.length,0);
-    const merged=new Float32Array(totalLen);
-    let offset=0;for(const s of allSamples){merged.set(s,offset);offset+=s.length;}
-
-    // Float32 → Int16 변환
-    setMp3Progress(78,'MP3 인코딩 준비 중...');
+    const merged=new Float32Array(totalLen);let offset=0;
+    for(const s of allSamples){merged.set(s,offset);offset+=s.length;}
+    setMp3Progress(78,'MP3 인코딩 준비...');
     const int16=new Int16Array(merged.length);
-    for(let i=0;i<merged.length;i++){
-      const s=Math.max(-1,Math.min(1,merged[i]));
-      int16[i]=s<0?s*32768:s*32767;
-    }
-
-    // lamejs MP3 인코딩 (128kbps, 모노)
+    for(let i=0;i<merged.length;i++){const s=Math.max(-1,Math.min(1,merged[i]));int16[i]=s<0?s*32768:s*32767;}
     setMp3Progress(80,'MP3 인코딩 중...');
-    if(typeof lamejs==='undefined')throw new Error('lamejs 라이브러리 로드 실패');
-    const mp3enc=new lamejs.Mp3Encoder(1,sampleRate,128);
-    const mp3Data=[];
-    const blockSize=1152;
+    if(typeof lamejs==='undefined')throw new Error('lamejs 로드 실패');
+    const enc=new lamejs.Mp3Encoder(1,sampleRate,128);
+    const mp3Data=[];const blockSize=1152;
     for(let i=0;i<int16.length;i+=blockSize){
       const chunk=int16.subarray(i,Math.min(i+blockSize,int16.length));
-      const encoded=mp3enc.encodeBuffer(chunk);
-      if(encoded.length>0)mp3Data.push(new Uint8Array(encoded));
-      if(i%46080===0){const p=80+Math.round(((i/int16.length)*18));setMp3Progress(p,`MP3 인코딩 중... ${Math.round(i/int16.length*100)}%`);}
+      const encoded=enc.encodeBuffer(chunk);if(encoded.length>0)mp3Data.push(new Uint8Array(encoded));
+      if(i%46080===0){const p=80+Math.round((i/int16.length)*18);setMp3Progress(p,`인코딩... ${Math.round(i/int16.length*100)}%`);}
     }
-    const flushed=mp3enc.flush();
-    if(flushed.length>0)mp3Data.push(new Uint8Array(flushed));
-
-    setMp3Progress(98,'파일 저장 중...');
+    const flushed=enc.flush();if(flushed.length>0)mp3Data.push(new Uint8Array(flushed));
+    setMp3Progress(98,'저장 중...');
     const blob=new Blob(mp3Data,{type:'audio/mpeg'});
-    await saveMp3File(blob,`asterion_${Date.now()}.mp3`);
-    setMp3Progress(100,'완료! ✓');
-    toast('MP3 저장 완료 ✓');
+    await saveMp3File(blob,`asterion_spk${STP.speakerId}_${Date.now()}.mp3`);
+    setMp3Progress(100,'완료 ✓');toast('MP3 저장 완료 ✓');
     setTimeout(()=>closeMp3Modal(),1200);
-
   }catch(e){
-    console.error('[MP3 Export]',e);
-    toast('MP3 변환 실패: '+e.message.slice(0,60),6000);
+    console.error('[MP3]',e);toast('MP3 실패: '+e.message.slice(0,60),6000);
     document.getElementById('mp3-progress-area').style.display='none';
     document.getElementById('mp3-create-btn').disabled=false;
   }
   mp3Exporting=false;
 }
-
 async function saveMp3File(blob,filename){
-  // 1순위: File System Access API
   if(window.showSaveFilePicker){
-    try{
-      const fh=await window.showSaveFilePicker({suggestedName:filename,types:[{description:'MP3 Audio',accept:{'audio/mpeg':['.mp3']}}]});
-      const ws=await fh.createWritable();await ws.write(blob);await ws.close();return;
-    }catch(e){if(e.name==='AbortError')throw e;}
+    try{const fh=await window.showSaveFilePicker({suggestedName:filename,types:[{description:'MP3',accept:{'audio/mpeg':['.mp3']}}]});const ws=await fh.createWritable();await ws.write(blob);await ws.close();return;}catch(e){if(e.name==='AbortError')throw e;}
   }
-  // 2순위: <a> 태그 폴백 (모바일 등)
-  const url=URL.createObjectURL(blob);
-  const a=document.createElement('a');a.href=url;a.download=filename;
-  document.body.appendChild(a);a.click();document.body.removeChild(a);
-  setTimeout(()=>URL.revokeObjectURL(url),5000);
+  const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=filename;document.body.appendChild(a);a.click();document.body.removeChild(a);setTimeout(()=>URL.revokeObjectURL(url),5000);
 }
 
 // ══ BTR 알림 ══
@@ -551,7 +516,7 @@ function connectNotifSSE(){if(sseConn){sseConn.close();sseConn=null;}const es=ne
 function updateBtrBadge(){const badge=document.getElementById('btr-badge'),btn=document.getElementById('btr-btn');if(pendingNotifs.length>0){badge.textContent=pendingNotifs.length;badge.style.display='inline';btn.classList.add('has-notif');}else{badge.style.display='none';btn.classList.remove('has-notif');}}
 function toggleBtr(){btrOpen=!btrOpen;document.getElementById('btr-panel').classList.toggle('open',btrOpen);document.getElementById('btr-btn').classList.toggle('active',btrOpen);if(btrOpen)renderBtrCards();}
 function getTypeLabel(t){return{info_request:'추가정보 요청',phase_confirm:'Phase 구간 확인'}[t]||t;}
-function renderBtrCards(){const c=document.getElementById('btr-cards'),e=document.getElementById('btr-empty');if(!pendingNotifs.length){c.innerHTML='';e.style.display='block';return;}e.style.display='none';c.innerHTML=pendingNotifs.map(n=>`<div class="nc" id="nc-${esc(n.id)}"><div class="nc-hdr"><div class="nc-meta"><span class="nc-type">${getTypeLabel(n.type)}</span><span class="nc-session">${esc(n.session_id)}</span></div><div class="nc-meta" style="gap:8px"><span class="nc-time">${n.created_at?new Date(n.created_at).toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'}):''}</span><button class="nc-dismiss" onclick="askDismiss('${esc(n.id)}')">✕</button></div></div><div class="nc-title">${esc(n.title)}</div><div class="nc-content">${esc(n.content)}</div><div class="nc-reply"><textarea class="nc-ta" id="nc-ta-${esc(n.id)}" placeholder="응답을 입력하세요..."></textarea><button class="nc-send" onclick="replyToNotif('${esc(n.id)}','${esc(n.title)}','${esc(n.content)}')">전송 →</button></div><div class="nc-confirm" id="nc-confirm-${esc(n.id)}"><p>이 알림을 삭제하면 BTR 루브릭이 종료됩니다.<br>계속하시겠습니까?</p><div class="nc-confirm-btns"><button class="nc-yes" onclick="confirmDismiss('${esc(n.id)}')">삭제</button><button class="nc-no" onclick="cancelDismiss('${esc(n.id)}')">취소</button></div></div></div>`).join('');}
+function renderBtrCards(){const c=document.getElementById('btr-cards'),e=document.getElementById('btr-empty');if(!pendingNotifs.length){c.innerHTML='';e.style.display='block';return;}e.style.display='none';c.innerHTML=pendingNotifs.map(n=>`<div class="nc" id="nc-${esc(n.id)}"><div class="nc-hdr"><div class="nc-meta"><span class="nc-type">${getTypeLabel(n.type)}</span><span class="nc-session">${esc(n.session_id)}</span></div><div class="nc-meta" style="gap:8px"><span class="nc-time">${n.created_at?new Date(n.created_at).toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'}):''}</span><button class="nc-dismiss" onclick="askDismiss('${esc(n.id)}')">✕</button></div></div><div class="nc-title">${esc(n.title)}</div><div class="nc-content">${esc(n.content)}</div><div class="nc-reply"><textarea class="nc-ta" id="nc-ta-${esc(n.id)}" placeholder="응답을 입력하세요..."></textarea><button class="nc-send" onclick="replyToNotif('${esc(n.id)}','${esc(n.title)}','${esc(n.content)}')">전송 →</button></div><div class="nc-confirm" id="nc-confirm-${esc(n.id)}"><p>이 알림을 삭제하면 BTR 루브릭이 종료됩니다.</p><div class="nc-confirm-btns"><button class="nc-yes" onclick="confirmDismiss('${esc(n.id)}')">삭제</button><button class="nc-no" onclick="cancelDismiss('${esc(n.id)}')">취소</button></div></div></div>`).join('');}
 function askDismiss(id){document.getElementById('nc-confirm-'+id)?.classList.add('show');}
 function cancelDismiss(id){document.getElementById('nc-confirm-'+id)?.classList.remove('show');}
 async function confirmDismiss(id){try{await fetch('/api/notifications/'+encodeURIComponent(id),{method:'DELETE'});toast('알림 삭제됨');}catch(e){toast('삭제 실패');}}
@@ -591,28 +556,23 @@ async function streamAI(){
   cntEl.classList.remove('cur');if(full)addTtsBtn(aiRow,full);
   S.streaming=false;document.getElementById('send').disabled=false;document.getElementById('uinput').focus();
 }
-
 function addTtsBtn(row,text){
-  const mb2=row.querySelector('.mb2');if(!mb2)return;
-  // 이미 버튼 있으면 스킵
-  if(mb2.querySelector('.tts-btn'))return;
+  const mb2=row.querySelector('.mb2');if(!mb2||mb2.querySelector('.tts-btn'))return;
   const btn=document.createElement('button');btn.className='tts-btn';btn.innerHTML='▶ 재생';
-  btn.title='TTS 음성 재생';btn.onclick=()=>speakText(text,btn);
+  btn.onclick=()=>speakText(text,btn);
+  // 길게 누르면 즐겨찾기 추가
+  btn.addEventListener('contextmenu',e=>{e.preventDefault();addCurrentFav();});
+  btn.addEventListener('touchstart',()=>{btn._longT=setTimeout(addCurrentFav,600);},{passive:true});
+  btn.addEventListener('touchend',()=>clearTimeout(btn._longT),{passive:true});
   mb2.appendChild(btn);
 }
-
-// ★ appendMsg: 어시스턴트 메시지 렌더링 시 재생 버튼 자동 추가 (재진입 후에도 유지)
 function appendMsg(role,content,empty){
   const isU=role==='user',ms=MODEL_STYLE[S.model]||MODEL_STYLE.claude;
   const now=new Date().toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'});
   const row=document.createElement('div');row.className='row';
   row.innerHTML='<div class="av '+(isU?'u':ms.avClass)+'">'+(isU?'U':ms.icon)+'</div><div class="mb2"><div class="meta"><span class="who '+(isU?'u':ms.whoClass)+'">'+(isU?'USER':ms.label)+'</span><span class="ts">'+now+'</span></div><div class="cnt '+(isU?'u':'')+'\">'+(isU?esc(content).replace(/\n/g,'<br>'):(content?marked.parse(content):''))+'</div></div>';
   document.getElementById('msgs').appendChild(row);
-  if(!empty){
-    hljs.highlightAll();addCopyBtns();scrollBot();
-    // ★ 어시스턴트 메시지 → 재생 버튼 즉시 추가 (재진입 후에도 유지)
-    if(!isU&&content){addTtsBtn(row,content);}
-  }
+  if(!empty){hljs.highlightAll();addCopyBtns();scrollBot();if(!isU&&content)addTtsBtn(row,content);}
   return row;
 }
 function addCopyBtns(){document.querySelectorAll('.cnt pre:not([data-cp])').forEach(p=>{p.setAttribute('data-cp','1');p.style.position='relative';const b=document.createElement('button');b.className='cpbtn';b.textContent='COPY';b.onclick=()=>{navigator.clipboard?.writeText(p.querySelector('code')?.textContent||'');b.textContent='COPIED';setTimeout(()=>b.textContent='COPY',1500);};p.appendChild(b);});}
@@ -642,15 +602,23 @@ async function init(){
   try{
     const d=JSON.parse(localStorage.getItem(PREF_KEY)||'{}');
     S.model=d.model||'claude';S.freestyle=d.freestyle||false;
-    STP.voice=d.stVoice||'F1';STP.steps=d.stSteps||5;STP.speed=d.stSpeed||1.0;
+    STP.speakerId=d.speakerId??0;
+    STP.speed=d.speed||1.0;
+    STP.noiseScale=d.noiseScale||0.667;
+    STP.favorites=d.favorites||[];
   }catch(_){}
   setModel(S.model,false);if(S.freestyle)applyFreestyle(false);
-  document.getElementById('st-voice').value=STP.voice;
-  document.getElementById('st-steps').value=STP.steps;document.getElementById('st-steps-val').textContent=STP.steps;
-  document.getElementById('tts-speed').value=STP.speed;document.getElementById('tts-speed-val').textContent=STP.speed.toFixed(2)+'x';
+  // UI 복원
+  document.getElementById('tts-speed').value=STP.speed;
+  document.getElementById('tts-speed-val').textContent=STP.speed.toFixed(2)+'x';
+  document.getElementById('tts-noise').value=STP.noiseScale;
+  document.getElementById('tts-noise-val').textContent=STP.noiseScale.toFixed(2);
+  updateSpeakerUI();
+  renderFavorites();
+
   marked.setOptions({breaks:true,gfm:true,highlight:(c,l)=>{if(l&&hljs.getLanguage(l))return hljs.highlight(c,{language:l}).value;return hljs.highlightAuto(c).value;}});
 
-  // ★ 마지막 대화 복원 (재생 버튼도 자동 추가됨)
+  // 마지막 대화 복원
   const convs=loadConversations();
   const sorted=Object.values(convs).sort((a,b)=>b.updated_at>a.updated_at?1:-1);
   if(sorted.length>0){
@@ -661,17 +629,21 @@ async function init(){
       S.messages.forEach(m=>{
         if(m.role==='user')appendMsg('user',m.content);
         else if(m.role==='assistant')appendMsg('assistant',m.content);
-        // appendMsg 내부에서 어시스턴트 메시지에 재생 버튼 자동 추가
       });
     }
   }
 
   checkStatus();connectNotifSSE();
-
-  // ★ TTS 자동 로드 (백그라운드, 완료 토스트 없음)
-  loadSupertonicModel(false);
+  // VITS 자동 로드 (백그라운드)
+  loadVitsModel(false);
 }
-function save(){localStorage.setItem(PREF_KEY,JSON.stringify({model:S.model,freestyle:S.freestyle,stVoice:STP.voice,stSteps:STP.steps,stSpeed:STP.speed}));}
+function save(){
+  localStorage.setItem(PREF_KEY,JSON.stringify({
+    model:S.model,freestyle:S.freestyle,
+    speakerId:STP.speakerId,speed:STP.speed,
+    noiseScale:STP.noiseScale,favorites:STP.favorites
+  }));
+}
 
 init();
 </script>
