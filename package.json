@@ -1,6 +1,6 @@
 {
   "name": "asterion-hub-backend",
-  "version": "4.0.0",
+  "version": "4.0.1",
   "description": "ASTERION Hub Chat Backend — Edge TTS + MCP",
   "main": "index.js",
   "type": "module",
@@ -13,6 +13,6 @@
     "googleapis":                   "^140.0.0",
     "@modelcontextprotocol/sdk":    "^1.0.1",
     "eventsource":                  "^2.0.2",
-    "ws":                           "^8.18.0"
+    "msedge-tts":                   "^2.2.4"
   }
 }

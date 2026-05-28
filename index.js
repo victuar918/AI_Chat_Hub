@@ -1,13 +1,8 @@
 /**
- * ASTERION Hub — Chat Backend v4.0
- * v4.0: TTS 엔진 교체 — Edge TTS (Microsoft, 한국어 8화자, WebSocket, 무료)
- *   - VITS/WebGPU 완전 제거 (ondevice 모델 로드 불필요)
- *   - /api/tts  : POST {text, voice, rate} → MP3 audio/mpeg
- *   - /api/tts/voices : GET → 한국어 화자 목록
- *   - /api/sync-source-files : POST → SOURCE_FILES Sheets 동기화
- * v3.9.1: SOURCE_FILES 자동 동기화
- * v3.9: VITS 70-speaker 시도
- * v3.6: L1/L3 도구 목록 업데이트
+ * ASTERION Hub — Chat Backend v4.0.1
+ * v4.0.1: Edge TTS 엔진 안정화 — ws 직접 구현 → msedge-tts 패키지
+ *   pitch 파라미터 지원 추가
+ * v4.0: TTS 엔진 교체 — Edge TTS (Microsoft, 한국어 8화자)
  */
 
 import express    from 'express';
@@ -16,8 +11,7 @@ import { google } from 'googleapis';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js';
 import EventSource from 'eventsource';
-import WebSocket  from 'ws';
-import { randomUUID } from 'crypto';
+import { MsEdgeTTS, OUTPUT_FORMAT } from 'msedge-tts';
 import { fileURLToPath } from 'url';
 import { dirname, join }  from 'path';
 
@@ -63,88 +57,54 @@ async function getGCPToken() {
   } catch { return null; }
 }
 
-// ════ EDGE TTS ════════════════════════════════════════════════════════════
-// Microsoft Edge 내장 TTS WebSocket API (API 키 불필요)
-// 한국어 8화자 · MP3 24kHz 48kbps · 무료
-const EDGE_TTS_URL = 'wss://speech.platform.bing.com/consumer/speech/synthesize/readaloud/edge/v1?TrustedClientToken=6A5AA1D4EAFF4E9FB37E23D68491D6F4&ConnectionId=';
-const EDGE_TTS_HEADERS = {
-  'Pragma':'no-cache','Cache-Control':'no-cache',
-  'Origin':'chrome-extension://jdiccldimpdaibmpdkjnbmckianbfold',
-  'User-Agent':'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36 Edg/121.0.0.0',
-};
-
-export const KO_VOICES = [
+// ════ EDGE TTS (msedge-tts 패키지) ════════════════════════════════════════════════
+const KO_VOICES = [
   { id:'ko-KR-SunHiNeural',    name:'선희',   gender:'F', desc:'따뜻하고 자연스러운 여성' },
   { id:'ko-KR-InJoonNeural',   name:'인준',   gender:'M', desc:'안정감 있는 남성' },
   { id:'ko-KR-YuJinNeural',    name:'유진',   gender:'F', desc:'밝고 활기찬 여성' },
   { id:'ko-KR-HyunsuNeural',   name:'현수',   gender:'M', desc:'젊고 친근한 남성' },
-  { id:'ko-KR-BongJinNeural',  name:'봉진',   gender:'M', desc:'차분하고 명확한 남성' },
+  { id:'ko-KR-BongJinNeural',  name:'봉진',   gender:'M', desc:'상당한 차분한 남성' },
   { id:'ko-KR-GookMinNeural',  name:'국민',   gender:'M', desc:'깊고 신뢰감 있는 남성' },
   { id:'ko-KR-JiMinNeural',    name:'지민',   gender:'F', desc:'부드럽고 감성적인 여성' },
-  { id:'ko-KR-SeoHyeonNeural', name:'서현',   gender:'F', desc:'또렷하고 전문적인 여성' },
+  { id:'ko-KR-SeoHyeonNeural', name:'서현',   gender:'F', desc:'릎려한 전문적인 여성' },
 ];
 
-function escXml(s){
-  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&apos;');
-}
-
 async function edgeTTS(text, voice='ko-KR-SunHiNeural', rate='+0%', pitch='+0Hz'){
+  const tts = new MsEdgeTTS();
+  // setMetadata(voice, outputFormat, voiceLocale?)
+  await tts.setMetadata(voice, OUTPUT_FORMAT.AUDIO_24KHZ_48KBITRATE_MONO_MP3, 'ko-KR');
+
   return new Promise((resolve, reject) => {
-    const id  = randomUUID().replace(/-/g,'');
-    const url = EDGE_TTS_URL + id;
-    let ws, timer;
     const chunks = [];
+    const timer = setTimeout(() => reject(new Error('Edge TTS timeout (25s)')), 25000);
 
+    let readable;
     try {
-      ws = new WebSocket(url, { headers: EDGE_TTS_HEADERS });
-    } catch(e) { return reject(e); }
+      // toStream(text, speed?, pitch?, rate?, volume?)
+      // speed: speaking speed, rate: prosody rate, pitch: prosody pitch
+      readable = tts.toStream(text, /* speed */ undefined, pitch, rate);
+    } catch(e) {
+      clearTimeout(timer);
+      return reject(new Error('TTS init: ' + e.message));
+    }
 
-    ws.on('open', () => {
-      // 1) 설정 메시지
-      ws.send(
-        `X-Timestamp:${new Date().toISOString()}\r\n` +
-        `Content-Type:application/json; charset=utf-8\r\n` +
-        `Path:speech.config\r\n\r\n` +
-        `{"context":{"synthesis":{"audio":{"metadataoptions":{"sentenceBoundaryEnabled":"false","wordBoundaryEnabled":"true"},"outputFormat":"audio-24khz-48kbitrate-mono-mp3"}}}}`
-      );
-      // 2) SSML 메시지
-      const ssml = `<speak version='1.0' xmlns='http://www.w3.org/2001/10/synthesis' xml:lang='ko-KR'>`+
-        `<voice name='${voice}'><prosody rate='${rate}' pitch='${pitch}'>${escXml(text)}</prosody></voice></speak>`;
-      ws.send(
-        `X-RequestId:${id}\r\n` +
-        `Content-Type:application/ssml+xml\r\n` +
-        `X-Timestamp:${new Date().toISOString()}\r\n` +
-        `Path:ssml\r\n\r\n` + ssml
-      );
-      timer = setTimeout(() => { try{ws.close();}catch(_){} reject(new Error('Edge TTS timeout')); }, 25000);
+    readable.on('data', chunk => {
+      if (Buffer.isBuffer(chunk)) chunks.push(chunk);
     });
-
-    ws.on('message', (data, isBinary) => {
-      if (isBinary) {
-        const buf = Buffer.isBuffer(data) ? data : Buffer.from(data);
-        // 앞 2바이트 = 헤더 길이, 그 다음이 오디오 데이터
-        try {
-          const headerLen = buf.readUInt16BE(0);
-          const audio = buf.slice(2 + headerLen);
-          if (audio.length > 0) chunks.push(audio);
-        } catch(_) {}
-      } else {
-        const msg = data.toString();
-        if (msg.includes('Path:turn.end')) {
-          clearTimeout(timer);
-          ws.close();
-          resolve(Buffer.concat(chunks));
-        }
-      }
+    readable.on('end', () => {
+      clearTimeout(timer);
+      if (chunks.length === 0) return reject(new Error('Edge TTS: 오디오 데이터 없음'));
+      resolve(Buffer.concat(chunks));
     });
-
-    ws.on('error', (e) => { clearTimeout(timer); reject(e); });
-    ws.on('close', () => { clearTimeout(timer); if (chunks.length>0) resolve(Buffer.concat(chunks)); });
+    readable.on('error', e => {
+      clearTimeout(timer);
+      reject(new Error('Edge TTS stream: ' + e.message));
+    });
   });
 }
 
-// ════ Drive KB ════════════════════════════════════════════════════════════
-const ASTERION_BASE = `너는 ASTERION의 내부 전용 AI다. ASTERION은 베딕 점성술(Lahiri 아야남샤)과 명리학을 결합한 에너지 공학 기반 분석 엔진이다. BTR(Birth Time Rectification)을 통해 개인 표준시를 확정하고, S-Class(97점↑ Hard Stop) 달성 이후에만 분석 결과물이 생성된다. asterion-mcp의 모든 도구를 자유롭게 사용한다.\n\n[운영 중인 시스템]\n- Archive GAS     : StructureCode 관리, PDF 생성, ExpireDate 기반 개인정보 삭제\n- 3자 루브릭      : Claude × Gemini × GPT, Hard Stop = 세 AI 97점↑ AND critical_issues 없음\n- ASTERION Flow   : BTR Result Code 기반 구독 분석 (Annual/Monthly/Weekly)\n- asterion-mcp    : L0~L6 단일 MCP 서버 (84개 도구), Cloud Run 배포\n\n[핵심 스프레드시트 ID]\n- Archive:        1ym1cgr1apEyTlqtJXqrfdnLjoyJTh086CjGycMcUOS8\n- VideoAuto:      1ugWJmyLItD95Vz7Jq8Wjxn0_Ml5REjrhUxNZVFoIFmc\n- JuliarCalendar: 1whKvFyWmb-qbR6OJt5dcI6WOJMLB5MUIzNMlJBFeq_g\n\n[알림 시스템]\n- BTRNotifications 시트에서 pending 알림 폴링 (5초 간격 SSE)\n- 알림 유형: info_request(추가정보 요청), phase_confirm(Phase 구간 확인)\n- 관리자 응답 → Gemini에게 전달 → BTR 파이프라인 계속 진행\n\n[중요] 도구 목록을 언급할 때는 반드시 아래 [실제 연결된 MCP 도구] 섹션의 도구 이름만 사용한다. 존재하지 않는 도구를 절대 만들어내지 않는다.\n\n외부 요청에 정확성과 무결성을 최우선으로 하고, 확신하지 못하는 부분은 솔직하게 표현한다.`;
+// ════ Drive KB ══════════════════════════════════════════════════════════
+const ASTERION_BASE = `너는 ASTERION의 내부 전용 AI다. ASTERION은 베딕 점성술(Lahiri 아야남샤)과 명리학을 결합한 에너지 공학 기반 분석 엔진이다. BTR(Birth Time Rectification)을 통해 개인 표준시를 확정하고, S-Class(97점↑ Hard Stop) 달성 이후에만 분석 결과물이 생성된다. asterion-mcp의 모든 도구를 자유롭게 사용한다.\n\n[운영 중인 시스템]\n- Archive GAS     : StructureCode 관리, PDF 생성, ExpireDate 기반 개인정보 삭제\n- 3자 루브릭      : Claude × Gemini × GPT, Hard Stop = 세 AI 97점↑ AND critical_issues 없음\n- ASTERION Flow   : BTR Result Code 기반 구독 분석 (Annual/Monthly/Weekly)\n- asterion-mcp    : L0~L6 단일 MCP 서버 (84개 도구), Cloud Run 배포\n\n[핵심 스프레드시트 ID]\n- Archive:        1ym1cgr1apEyTlqtJXqrfdnLjoyJTh086CjGycMcUOS8\n- VideoAuto:      1ugWJmyLItD95Vz7Jq8Wjxn0_Ml5REjrhUxNZVFoIFmc\n- JuliarCalendar: 1whKvFyWmb-qbR6OJt5dcI6WOJMLB5MUIzNMlJBFeq_g\n\n[알림 시스템]\n- BTRNotifications 시트에서 pending 알림 폴링 (5초 간격 SSE)\n- 알림 유형: info_request(추가정보 요청), phase_confirm(Phase 구간 확인)\n\n[중요] 도구 목록을 언급할 때는 반드시 아래 [실제 연결된 MCP 도구] 섹션의 도구 이름만 사용한다.\n운영 요청에 정확성과 무결성을 최우선으로 한다.`;
 
 let knowledgeContext = '', knowledgeStatus = 'not_loaded';
 
@@ -205,33 +165,27 @@ async function callMCPTool(name, input) {
 
 // ════ BTR Notifications ═══════════════════════════════════════════════════
 async function fetchBTRNotifications() {
-  const tok = await getGCPToken();
-  if (!tok) return [];
+  const tok = await getGCPToken(); if (!tok) return [];
   try {
     const r = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${ARCHIVE_SS_ID}/values/${encodeURIComponent(NOTIF_SHEET)}`, { headers: { Authorization: `Bearer ${tok}` } });
     if (!r.ok) return [];
-    const rows = ((await r.json()).values) || [];
-    if (rows.length < 2) return [];
+    const rows = ((await r.json()).values) || []; if (rows.length < 2) return [];
     return rows.slice(1).map(row => ({ id:row[0]||'', session_id:row[1]||'', type:row[2]||'info_request', title:row[3]||'알림', content:row[4]||'', status:row[5]||'pending', created_at:row[6]||'' })).filter(n => n.id && n.status === 'pending');
   } catch(e) { return []; }
 }
-
 async function updateNotifStatus(id, status) {
-  const tok = await getGCPToken();
-  if (!tok) return false;
+  const tok = await getGCPToken(); if (!tok) return false;
   try {
     const r = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${ARCHIVE_SS_ID}/values/${encodeURIComponent(NOTIF_SHEET)}`, { headers: { Authorization: `Bearer ${tok}` } });
     if (!r.ok) return false;
     const rows = ((await r.json()).values) || [];
-    const rowIdx = rows.findIndex((row, i) => i > 0 && row[0] === id);
-    if (rowIdx < 0) return false;
+    const rowIdx = rows.findIndex((row, i) => i > 0 && row[0] === id); if (rowIdx < 0) return false;
     await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${ARCHIVE_SS_ID}/values/${encodeURIComponent(`${NOTIF_SHEET}!F${rowIdx + 1}`)}?valueInputOption=RAW`, { method: 'PUT', headers: { Authorization: `Bearer ${tok}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ values: [[status]] }) });
     return true;
   } catch(e) { return false; }
 }
 
-const notifClients = new Set();
-let lastNotifHash = '';
+const notifClients = new Set(); let lastNotifHash = '';
 function sendToAll(data) { const p = `data: ${JSON.stringify(data)}\n\n`; for (const res of notifClients) { try{res.write(p);}catch(_){notifClients.delete(res);} } }
 async function notifBackgroundPoll() { try { const n=await fetchBTRNotifications(); const h=n.map(x=>x.id).sort().join(','); if(h!==lastNotifHash){lastNotifHash=h;sendToAll({notifications:n});} } catch(_){} setTimeout(notifBackgroundPoll,5000); }
 notifBackgroundPoll();
@@ -292,11 +246,10 @@ async function runClaude(apiMsgs,systemBlocks,res){
   if(!response.ok)throw new Error(`Claude ${response.status}: ${(await response.text()).slice(0,400)}`);
   const result=await response.json();
   const usage=result.usage;
-  if(usage?.cache_read_input_tokens>0||usage?.cache_creation_input_tokens>0)console.log(`[Claude Cache] 읽기:${usage.cache_read_input_tokens||0} 쓰기:${usage.cache_creation_input_tokens||0}`);
+  if(usage?.cache_read_input_tokens>0||usage?.cache_creation_input_tokens>0)console.log(`[Cache] 읽기:${usage.cache_read_input_tokens||0} 쓰기:${usage.cache_creation_input_tokens||0}`);
   for(const b of(result.content||[])){if(b.type==='mcp_tool_use')writeSSE(res,{tool_call:{id:b.id,name:b.name,input:b.input}});if(b.type==='mcp_tool_result')writeSSE(res,{tool_result:{name:b.name||'tool',ok:!b.is_error}});}
   for(const b of(result.content||[])){if(b.type==='text'&&b.text)emitChunked(res,b.text);}
 }
-
 async function runGemini(messages,systemPrompt,res){
   if(!GEMINI_KEY){writeSSE(res,{error:'GEMINI_API_KEY 미설정'});return;}
   const url=`https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_KEY}`;
@@ -325,12 +278,11 @@ async function runGemini(messages,systemPrompt,res){
     depth++;
   }
 }
-
 async function runGPT(inputMsgs,res){
   if(!OPENAI_KEY){writeSSE(res,{error:'OPENAI_API_KEY 미설정'});return;}
   const mcpSseUrl=MCP_SERVER_URL?buildSSEUrl(MCP_SERVER_URL):null;
   const body={model:GPT_MODEL,input:inputMsgs,reasoning:{effort:'medium'}};
-  if(mcpSseUrl){const tool={type:'mcp',server_label:'asterion-mcp',server_description:'ASTERION BTR 분석 도구',server_url:mcpSseUrl,require_approval:'never'};if(MCP_SECRET_KEY)tool.authorization={type:'bearer',token:MCP_SECRET_KEY};body.tools=[tool];}
+  if(mcpSseUrl){const tool={type:'mcp',server_label:'asterion-mcp',server_description:'ASTERION 도구',server_url:mcpSseUrl,require_approval:'never'};if(MCP_SECRET_KEY)tool.authorization={type:'bearer',token:MCP_SECRET_KEY};body.tools=[tool];}
   const response=await fetchWithRetry('https://api.openai.com/v1/responses',{method:'POST',headers:{'Authorization':`Bearer ${OPENAI_KEY}`,'Content-Type':'application/json'},body:JSON.stringify(body)});
   if(!response.ok)throw new Error(`GPT ${response.status}: ${(await response.text()).slice(0,400)}`);
   const result=await response.json();
@@ -340,21 +292,20 @@ async function runGPT(inputMsgs,res){
 // ════ API Routes ══════════════════════════════════════════════════════════
 
 // ── TTS Routes ──
-app.get('/api/tts/voices', (_req, res) => {
-  res.json({ voices: KO_VOICES });
-});
+app.get('/api/tts/voices', (_req, res) => res.json({ voices: KO_VOICES }));
 
 app.post('/api/tts', async (req, res) => {
   const { text, voice = 'ko-KR-SunHiNeural', rate = '+0%', pitch = '+0Hz' } = req.body || {};
   if (!text?.trim()) return res.status(400).json({ error: '텍스트 없음' });
   try {
+    console.log(`[TTS] ${voice} rate=${rate} pitch=${pitch} len=${text.length}`);
     const audio = await edgeTTS(text.slice(0, 600), voice, rate, pitch);
     res.setHeader('Content-Type', 'audio/mpeg');
     res.setHeader('Content-Length', audio.length);
     res.setHeader('Cache-Control', 'no-cache');
     res.send(audio);
   } catch(e) {
-    console.error('[Edge TTS]', e.message);
+    console.error('[Edge TTS error]', e.message);
     res.status(500).json({ error: e.message });
   }
 });
@@ -362,10 +313,7 @@ app.post('/api/tts', async (req, res) => {
 // ── Chat Route ──
 app.post('/api/chat', async (req, res) => {
   const { model='claude', messages=[], system='', freestyle=false } = req.body;
-  res.setHeader('Content-Type','text/event-stream');
-  res.setHeader('Cache-Control','no-cache');
-  res.setHeader('Connection','keep-alive');
-  res.setHeader('X-Accel-Buffering','no');
+  res.setHeader('Content-Type','text/event-stream');res.setHeader('Cache-Control','no-cache');res.setHeader('Connection','keep-alive');res.setHeader('X-Accel-Buffering','no');
   try {
     if      (model==='claude') await runClaude(normClaude(messages), buildClaudeSystem(freestyle,system), res);
     else if (model==='gemini') await runGemini(messages, buildStringSystem(freestyle,system), res);
@@ -379,17 +327,13 @@ app.post('/api/chat', async (req, res) => {
 app.post('/api/sync-source-files', async (req, res) => {
   const { bgv=[], bgm=[], spreadsheet_id=VIDEO_SS_ID } = req.body;
   const tok = await getGCPToken();
-  if (!tok) return res.json({ success:false, error:'GCP ADC 인증 실패' });
+  if (!tok) return res.json({ success:false, error:'GCP ADC 실패' });
   const today = new Date().toISOString().slice(0,10);
-  const rows = [
-    ['Type','Filename','Duration_Sec','Category','Tags','Notes','Last_Sync'],
-    ...bgv.map(f => ['BGV',f,'','background-video','','',today]),
-    ...bgm.map(f => ['BGM',f,'','background-music','','',today]),
-  ];
+  const rows = [['Type','Filename','Duration_Sec','Category','Tags','Notes','Last_Sync'],...bgv.map(f=>['BGV',f,'','background-video','','',today]),...bgm.map(f=>['BGM',f,'','background-music','','',today])];
   try {
     const r = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheet_id}/values/${encodeURIComponent('SOURCE_FILES!A1')}?valueInputOption=USER_ENTERED`, { method:'PUT', headers:{Authorization:`Bearer ${tok}`,'Content-Type':'application/json'}, body:JSON.stringify({values:rows}) });
     if (!r.ok) return res.json({ success:false, error:`Sheets ${r.status}` });
-    return res.json({ success:true, bgv_count:bgv.length, bgm_count:bgm.length, total_files:bgv.length+bgm.length, sheet_rows:rows.length-1, synced_at:today });
+    return res.json({ success:true, bgv_count:bgv.length, bgm_count:bgm.length, total_files:bgv.length+bgm.length, synced_at:today });
   } catch(e) { return res.json({ success:false, error:e.message }); }
 });
 
@@ -411,24 +355,21 @@ app.delete('/api/notifications/:id', async (req, res) => {
   res.json({success:ok});
 });
 
-// ── Status / Utility Routes ──
+// ── Status/Utility Routes ──
 app.get('/api/status', (_req, res) => res.json({
-  claude:     {model:CLAUDE_MODEL,api:CLAUDE_KEY?'OK':'⚠ 미설정'},
-  gemini:     {model:GEMINI_MODEL,api:GEMINI_KEY?'OK':'⚠ 미설정'},
-  gpt:        {model:GPT_MODEL,api:OPENAI_KEY?'OK':'⚠ 미설정'},
-  tts:        {engine:'Edge TTS (Microsoft)',voices:KO_VOICES.length,api_key:'불필요'},
-  drive:      {status:knowledgeStatus,chars:knowledgeContext.length},
-  mcp:        {connected:!!mcpClient,tools:mcpTools.length,url:MCP_SERVER_URL||'미설정'},
-  notifClients: notifClients.size,
-  video_ss:   VIDEO_SS_ID,
+  claude:{model:CLAUDE_MODEL,api:CLAUDE_KEY?'OK':'⚠ 미설정'},
+  gemini:{model:GEMINI_MODEL,api:GEMINI_KEY?'OK':'⚠ 미설정'},
+  tts:{engine:'Edge TTS (msedge-tts)',voices:KO_VOICES.length,api_key:'불필요'},
+  drive:{status:knowledgeStatus,chars:knowledgeContext.length},
+  mcp:{connected:!!mcpClient,tools:mcpTools.length,url:MCP_SERVER_URL||'미설정'},
+  notifClients:notifClients.size, video_ss:VIDEO_SS_ID,
 }));
 app.post('/api/reload-knowledge', async (_req, res) => { knowledgeContext=''; knowledgeStatus='loading...'; await loadDriveKnowledge(); res.json({status:knowledgeStatus}); });
 app.post('/api/reconnect-mcp', async (_req, res) => { mcpClient=null; mcpTools=[]; await connectMCP(); res.json({connected:!!mcpClient,tools:mcpTools.length}); });
 
 app.listen(PORT, '0.0.0.0', () => {
-  console.log(`🔱 ASTERION Hub v4.0 — port ${PORT}`);
-  console.log(`   TTS    : Edge TTS (Microsoft) · ${KO_VOICES.length}개 한국어 화자 · API 키 불필요`);
+  console.log(`🔱 ASTERION Hub v4.0.1 — port ${PORT}`);
+  console.log(`   TTS    : msedge-tts · ${KO_VOICES.length}화자 · rate/pitch 지원`);
   console.log(`   Claude : ${CLAUDE_MODEL} ${CLAUDE_KEY?'✓':'✗'}`);
-  console.log(`   Gemini : ${GEMINI_MODEL} ${GEMINI_KEY?'✓':'✗'}`);
   console.log(`   MCP    : ${MCP_SERVER_URL||'미설정'} | tools:${mcpTools.length}`);
 });
