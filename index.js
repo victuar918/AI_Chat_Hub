@@ -1,10 +1,13 @@
 /**
- * ASTERION Hub — Chat Backend v3.9.1
- * v3.9.1: /api/sync-source-files 추가 — showDirectoryPicker로 읽은 BGV/BGM 목록을 SOURCE_FILES 시트에 자동 기록
- * v3.9: VITS 70-speaker TTS (ORI-Muchim), 화자 탐색기 UI
- * v3.8: TTS 자동로드, 드롭아웃 수정, MP3 저장
+ * ASTERION Hub — Chat Backend v4.0
+ * v4.0: TTS 엔진 교체 — Edge TTS (Microsoft, 한국어 8화자, WebSocket, 무료)
+ *   - VITS/WebGPU 완전 제거 (ondevice 모델 로드 불필요)
+ *   - /api/tts  : POST {text, voice, rate} → MP3 audio/mpeg
+ *   - /api/tts/voices : GET → 한국어 화자 목록
+ *   - /api/sync-source-files : POST → SOURCE_FILES Sheets 동기화
+ * v3.9.1: SOURCE_FILES 자동 동기화
+ * v3.9: VITS 70-speaker 시도
  * v3.6: L1/L3 도구 목록 업데이트
- * v3.5: COOP/COEP 헤더 → SharedArrayBuffer + SSE 알림 시스템
  */
 
 import express    from 'express';
@@ -13,6 +16,8 @@ import { google } from 'googleapis';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js';
 import EventSource from 'eventsource';
+import WebSocket  from 'ws';
+import { randomUUID } from 'crypto';
 import { fileURLToPath } from 'url';
 import { dirname, join }  from 'path';
 
@@ -52,15 +57,93 @@ const MAX_TOOL_DEPTH  = 8;
 
 async function getGCPToken() {
   try {
-    const r = await fetch(
-      'http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token',
-      { headers: {'Metadata-Flavor':'Google'} }
-    );
+    const r = await fetch('http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token', { headers:{'Metadata-Flavor':'Google'} });
     if (!r.ok) return null;
     return (await r.json()).access_token;
   } catch { return null; }
 }
 
+// ════ EDGE TTS ════════════════════════════════════════════════════════════
+// Microsoft Edge 내장 TTS WebSocket API (API 키 불필요)
+// 한국어 8화자 · MP3 24kHz 48kbps · 무료
+const EDGE_TTS_URL = 'wss://speech.platform.bing.com/consumer/speech/synthesize/readaloud/edge/v1?TrustedClientToken=6A5AA1D4EAFF4E9FB37E23D68491D6F4&ConnectionId=';
+const EDGE_TTS_HEADERS = {
+  'Pragma':'no-cache','Cache-Control':'no-cache',
+  'Origin':'chrome-extension://jdiccldimpdaibmpdkjnbmckianbfold',
+  'User-Agent':'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36 Edg/121.0.0.0',
+};
+
+export const KO_VOICES = [
+  { id:'ko-KR-SunHiNeural',    name:'선희',   gender:'F', desc:'따뜻하고 자연스러운 여성' },
+  { id:'ko-KR-InJoonNeural',   name:'인준',   gender:'M', desc:'안정감 있는 남성' },
+  { id:'ko-KR-YuJinNeural',    name:'유진',   gender:'F', desc:'밝고 활기찬 여성' },
+  { id:'ko-KR-HyunsuNeural',   name:'현수',   gender:'M', desc:'젊고 친근한 남성' },
+  { id:'ko-KR-BongJinNeural',  name:'봉진',   gender:'M', desc:'차분하고 명확한 남성' },
+  { id:'ko-KR-GookMinNeural',  name:'국민',   gender:'M', desc:'깊고 신뢰감 있는 남성' },
+  { id:'ko-KR-JiMinNeural',    name:'지민',   gender:'F', desc:'부드럽고 감성적인 여성' },
+  { id:'ko-KR-SeoHyeonNeural', name:'서현',   gender:'F', desc:'또렷하고 전문적인 여성' },
+];
+
+function escXml(s){
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&apos;');
+}
+
+async function edgeTTS(text, voice='ko-KR-SunHiNeural', rate='+0%', pitch='+0Hz'){
+  return new Promise((resolve, reject) => {
+    const id  = randomUUID().replace(/-/g,'');
+    const url = EDGE_TTS_URL + id;
+    let ws, timer;
+    const chunks = [];
+
+    try {
+      ws = new WebSocket(url, { headers: EDGE_TTS_HEADERS });
+    } catch(e) { return reject(e); }
+
+    ws.on('open', () => {
+      // 1) 설정 메시지
+      ws.send(
+        `X-Timestamp:${new Date().toISOString()}\r\n` +
+        `Content-Type:application/json; charset=utf-8\r\n` +
+        `Path:speech.config\r\n\r\n` +
+        `{"context":{"synthesis":{"audio":{"metadataoptions":{"sentenceBoundaryEnabled":"false","wordBoundaryEnabled":"true"},"outputFormat":"audio-24khz-48kbitrate-mono-mp3"}}}}`
+      );
+      // 2) SSML 메시지
+      const ssml = `<speak version='1.0' xmlns='http://www.w3.org/2001/10/synthesis' xml:lang='ko-KR'>`+
+        `<voice name='${voice}'><prosody rate='${rate}' pitch='${pitch}'>${escXml(text)}</prosody></voice></speak>`;
+      ws.send(
+        `X-RequestId:${id}\r\n` +
+        `Content-Type:application/ssml+xml\r\n` +
+        `X-Timestamp:${new Date().toISOString()}\r\n` +
+        `Path:ssml\r\n\r\n` + ssml
+      );
+      timer = setTimeout(() => { try{ws.close();}catch(_){} reject(new Error('Edge TTS timeout')); }, 25000);
+    });
+
+    ws.on('message', (data, isBinary) => {
+      if (isBinary) {
+        const buf = Buffer.isBuffer(data) ? data : Buffer.from(data);
+        // 앞 2바이트 = 헤더 길이, 그 다음이 오디오 데이터
+        try {
+          const headerLen = buf.readUInt16BE(0);
+          const audio = buf.slice(2 + headerLen);
+          if (audio.length > 0) chunks.push(audio);
+        } catch(_) {}
+      } else {
+        const msg = data.toString();
+        if (msg.includes('Path:turn.end')) {
+          clearTimeout(timer);
+          ws.close();
+          resolve(Buffer.concat(chunks));
+        }
+      }
+    });
+
+    ws.on('error', (e) => { clearTimeout(timer); reject(e); });
+    ws.on('close', () => { clearTimeout(timer); if (chunks.length>0) resolve(Buffer.concat(chunks)); });
+  });
+}
+
+// ════ Drive KB ════════════════════════════════════════════════════════════
 const ASTERION_BASE = `너는 ASTERION의 내부 전용 AI다. ASTERION은 베딕 점성술(Lahiri 아야남샤)과 명리학을 결합한 에너지 공학 기반 분석 엔진이다. BTR(Birth Time Rectification)을 통해 개인 표준시를 확정하고, S-Class(97점↑ Hard Stop) 달성 이후에만 분석 결과물이 생성된다. asterion-mcp의 모든 도구를 자유롭게 사용한다.\n\n[운영 중인 시스템]\n- Archive GAS     : StructureCode 관리, PDF 생성, ExpireDate 기반 개인정보 삭제\n- 3자 루브릭      : Claude × Gemini × GPT, Hard Stop = 세 AI 97점↑ AND critical_issues 없음\n- ASTERION Flow   : BTR Result Code 기반 구독 분석 (Annual/Monthly/Weekly)\n- asterion-mcp    : L0~L6 단일 MCP 서버 (84개 도구), Cloud Run 배포\n\n[핵심 스프레드시트 ID]\n- Archive:        1ym1cgr1apEyTlqtJXqrfdnLjoyJTh086CjGycMcUOS8\n- VideoAuto:      1ugWJmyLItD95Vz7Jq8Wjxn0_Ml5REjrhUxNZVFoIFmc\n- JuliarCalendar: 1whKvFyWmb-qbR6OJt5dcI6WOJMLB5MUIzNMlJBFeq_g\n\n[알림 시스템]\n- BTRNotifications 시트에서 pending 알림 폴링 (5초 간격 SSE)\n- 알림 유형: info_request(추가정보 요청), phase_confirm(Phase 구간 확인)\n- 관리자 응답 → Gemini에게 전달 → BTR 파이프라인 계속 진행\n\n[중요] 도구 목록을 언급할 때는 반드시 아래 [실제 연결된 MCP 도구] 섹션의 도구 이름만 사용한다. 존재하지 않는 도구를 절대 만들어내지 않는다.\n\n외부 요청에 정확성과 무결성을 최우선으로 하고, 확신하지 못하는 부분은 솔직하게 표현한다.`;
 
 let knowledgeContext = '', knowledgeStatus = 'not_loaded';
@@ -91,6 +174,7 @@ async function loadDriveKnowledge() {
 }
 loadDriveKnowledge();
 
+// ════ MCP Client ══════════════════════════════════════════════════════════
 let mcpClient = null, mcpTools = [], mcpRetryTimer = null;
 function buildSSEUrl(u) { const s = u.replace(/\/$/, ''); return s.endsWith('/sse') ? s : s + '/sse'; }
 
@@ -119,226 +203,163 @@ async function callMCPTool(name, input) {
   catch (e) { return JSON.stringify({ error: e.message }); }
 }
 
+// ════ BTR Notifications ═══════════════════════════════════════════════════
 async function fetchBTRNotifications() {
   const tok = await getGCPToken();
   if (!tok) return [];
   try {
-    const r = await fetch(
-      `https://sheets.googleapis.com/v4/spreadsheets/${ARCHIVE_SS_ID}/values/${encodeURIComponent(NOTIF_SHEET)}`,
-      { headers: { Authorization: `Bearer ${tok}` } }
-    );
-    if (!r.ok) { console.warn('[Notif] Sheets 읽기 실패:', r.status); return []; }
+    const r = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${ARCHIVE_SS_ID}/values/${encodeURIComponent(NOTIF_SHEET)}`, { headers: { Authorization: `Bearer ${tok}` } });
+    if (!r.ok) return [];
     const rows = ((await r.json()).values) || [];
     if (rows.length < 2) return [];
-    return rows.slice(1)
-      .map((row) => ({
-        id: row[0]||'', session_id: row[1]||'', type: row[2]||'info_request',
-        title: row[3]||'알림', content: row[4]||'', status: row[5]||'pending', created_at: row[6]||'',
-      }))
-      .filter(n => n.id && n.status === 'pending');
-  } catch(e) { console.error('[Notif GET]', e.message); return []; }
+    return rows.slice(1).map(row => ({ id:row[0]||'', session_id:row[1]||'', type:row[2]||'info_request', title:row[3]||'알림', content:row[4]||'', status:row[5]||'pending', created_at:row[6]||'' })).filter(n => n.id && n.status === 'pending');
+  } catch(e) { return []; }
 }
 
 async function updateNotifStatus(id, status) {
   const tok = await getGCPToken();
   if (!tok) return false;
   try {
-    const r = await fetch(
-      `https://sheets.googleapis.com/v4/spreadsheets/${ARCHIVE_SS_ID}/values/${encodeURIComponent(NOTIF_SHEET)}`,
-      { headers: { Authorization: `Bearer ${tok}` } }
-    );
+    const r = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${ARCHIVE_SS_ID}/values/${encodeURIComponent(NOTIF_SHEET)}`, { headers: { Authorization: `Bearer ${tok}` } });
     if (!r.ok) return false;
     const rows = ((await r.json()).values) || [];
     const rowIdx = rows.findIndex((row, i) => i > 0 && row[0] === id);
     if (rowIdx < 0) return false;
-    await fetch(
-      `https://sheets.googleapis.com/v4/spreadsheets/${ARCHIVE_SS_ID}/values/${encodeURIComponent(`${NOTIF_SHEET}!F${rowIdx + 1}`)}?valueInputOption=RAW`,
-      { method: 'PUT', headers: { Authorization: `Bearer ${tok}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ values: [[status]] }) }
-    );
+    await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${ARCHIVE_SS_ID}/values/${encodeURIComponent(`${NOTIF_SHEET}!F${rowIdx + 1}`)}?valueInputOption=RAW`, { method: 'PUT', headers: { Authorization: `Bearer ${tok}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ values: [[status]] }) });
     return true;
-  } catch(e) { console.error('[Notif UPDATE]', e.message); return false; }
+  } catch(e) { return false; }
 }
 
-const notifClients  = new Set();
-let   lastNotifHash = '';
-
-function sendToAll(data) {
-  const payload = `data: ${JSON.stringify(data)}\n\n`;
-  for (const res of notifClients) {
-    try { res.write(payload); } catch(_) { notifClients.delete(res); }
-  }
-}
-
-async function notifBackgroundPoll() {
-  try {
-    const notifs  = await fetchBTRNotifications();
-    const hash    = notifs.map(n => n.id).sort().join(',');
-    if (hash !== lastNotifHash) {
-      lastNotifHash = hash;
-      sendToAll({ notifications: notifs });
-      if (notifs.length > 0) console.log(`[Notif] 변경 감지 → ${notifs.length}건 브로드캐스트`);
-    }
-  } catch(_) {}
-  setTimeout(notifBackgroundPoll, 5000);
-}
+const notifClients = new Set();
+let lastNotifHash = '';
+function sendToAll(data) { const p = `data: ${JSON.stringify(data)}\n\n`; for (const res of notifClients) { try{res.write(p);}catch(_){notifClients.delete(res);} } }
+async function notifBackgroundPoll() { try { const n=await fetchBTRNotifications(); const h=n.map(x=>x.id).sort().join(','); if(h!==lastNotifHash){lastNotifHash=h;sendToAll({notifications:n});} } catch(_){} setTimeout(notifBackgroundPoll,5000); }
 notifBackgroundPoll();
 
+// ════ AI Runners ══════════════════════════════════════════════════════════
 const writeSSE  = (res, p) => res.write(`data: ${JSON.stringify(p)}\n\n`);
 const writeDone = (res)    => res.write('data: [DONE]\n\n');
-
-async function fetchWithRetry(url, options, max = 3) {
-  for (let i = 0; i < max; i++) {
-    const r = await fetch(url, options);
-    if ((r.status === 429 || r.status === 503) && i < max - 1) { await new Promise(r => setTimeout(r, Math.pow(2,i)*1500+Math.random()*500)); continue; }
-    return r;
-  }
-}
-
-function pruneMessages(msgs) { const max = MAX_MSG_PAIRS*2; return msgs.length <= max ? msgs : [msgs[0], ...msgs.slice(-(max-1))]; }
-function emitChunked(res, text) { for (const c of (text.match(/[\s\S]{1,80}/g) || [text])) writeSSE(res, { text: c }); }
+async function fetchWithRetry(url, options, max = 3) { for (let i = 0; i < max; i++) { const r = await fetch(url, options); if ((r.status===429||r.status===503) && i<max-1) { await new Promise(r=>setTimeout(r,Math.pow(2,i)*1500+Math.random()*500)); continue; } return r; } }
+function pruneMessages(msgs) { const max=MAX_MSG_PAIRS*2; return msgs.length<=max?msgs:[msgs[0],...msgs.slice(-(max-1))]; }
+function emitChunked(res, text) { for (const c of (text.match(/[\s\S]{1,80}/g)||[text])) writeSSE(res,{text:c}); }
 
 function buildMcpToolSection() {
-  if (mcpTools.length === 0) return '';
-  const L0 = ['geocode_location','get_timezone','get_planet_positions','get_house_positions','get_navamsa_chart','get_ascendant','get_planet_in_house','get_planet_in_sign','get_current_dasha','get_dasha_timeline','get_dasha_sandhi','get_birth_nakshatra','get_planet_yogas','get_transit_planets','get_full_chart_analysis','get_horoscope_predictions','get_match_report','get_numerology_prediction','get_ashtakvarga_data','astro_check_retrograde','astro_planetary_war_check'];
-  const L1 = ['create_btr_session','save_runtime_snapshot','get_runtime_snapshot','purge_runtime_state','save_evolution_log','get_evolution_history','validate_sclass_gate','btr_init_candidate_slots','btr_consensus_analyzer','btr_conflict_axis_finder','btr_re_eval_pivots','btr_weight_adjuster','btr_prediction_tester','btr_write_notification','btr_finalize_confirmed','btr_finalize_held','init_btr_sheets','video_init_sheets','video_create_script','video_read_script','video_update_row_status','video_delete_script'];
-  const L2 = ['gcloud_submit','cloudbuild_status','cloudrun_services','artifact_list','cloudrun_set_env','agent_registry_list','agent_registry_register'];
-  const L3 = ['github_read_file','github_write_file','github_list_files','gh_push_files','sheets_read','sheets_write','http_request','get_system_status','append_sheet_row'];
-  const L4 = ['read_google_doc','create_google_doc','create_spreadsheet','export_doc_as_pdf','delete_drive_file','create_drive_folder','delete_drive_folder','list_drive_contents','list_script_projects','get_script_content','update_script_file','deploy_script_webapp','backup_script_project','delete_artifact_image','list_run_revisions','delete_run_revision','create_btr_report_doc'];
-  const L5 = ['call_gemini','call_claude','call_gpt'];
-  const L6 = ['report_generate_btr_code','report_generate_summary','report_add_gemstone_advice','ops_audit_log_exporter','ops_pattern_match_failure'];
-  const f = (names) => mcpTools.filter(t => names.includes(t.name)).map(t => t.name);
-  const byLayer = { L0:f(L0), L1:f(L1), L2:f(L2), L3:f(L3), L4:f(L4), L5:f(L5), L6:f(L6) };
-  const lines = [`\n\n[실제 연결된 MCP 도구 ${mcpTools.length}개 — asterion-mcp]`];
-  if (byLayer.L0.length) lines.push(`L0 VedAstro(${byLayer.L0.length}): ${byLayer.L0.join(', ')}`);
-  if (byLayer.L1.length) lines.push(`L1 BTR+Video(${byLayer.L1.length}): ${byLayer.L1.join(', ')}`);
-  if (byLayer.L2.length) lines.push(`L2 GCloud(${byLayer.L2.length}): ${byLayer.L2.join(', ')}`);
-  if (byLayer.L3.length) lines.push(`L3 SystemOps(${byLayer.L3.length}): ${byLayer.L3.join(', ')}`);
-  if (byLayer.L4.length) lines.push(`L4 Workspace(${byLayer.L4.length}): ${byLayer.L4.join(', ')}`);
-  if (byLayer.L5.length) lines.push(`L5 AI(${byLayer.L5.length}): ${byLayer.L5.join(', ')}`);
-  if (byLayer.L6.length) lines.push(`L6 Report/Ops(${byLayer.L6.length}): ${byLayer.L6.join(', ')}`);
+  if (mcpTools.length===0) return '';
+  const L0=['geocode_location','get_timezone','get_planet_positions','get_house_positions','get_navamsa_chart','get_ascendant','get_planet_in_house','get_planet_in_sign','get_current_dasha','get_dasha_timeline','get_dasha_sandhi','get_birth_nakshatra','get_planet_yogas','get_transit_planets','get_full_chart_analysis','get_horoscope_predictions','get_match_report','get_numerology_prediction','get_ashtakvarga_data','astro_check_retrograde','astro_planetary_war_check'];
+  const L1=['create_btr_session','save_runtime_snapshot','get_runtime_snapshot','purge_runtime_state','save_evolution_log','get_evolution_history','validate_sclass_gate','btr_init_candidate_slots','btr_consensus_analyzer','btr_conflict_axis_finder','btr_re_eval_pivots','btr_weight_adjuster','btr_prediction_tester','btr_write_notification','btr_finalize_confirmed','btr_finalize_held','init_btr_sheets','video_init_sheets','video_create_script','video_read_script','video_update_row_status','video_delete_script'];
+  const L2=['gcloud_submit','cloudbuild_status','cloudrun_services','artifact_list','cloudrun_set_env','agent_registry_list','agent_registry_register'];
+  const L3=['github_read_file','github_write_file','github_list_files','gh_push_files','sheets_read','sheets_write','http_request','get_system_status','append_sheet_row'];
+  const L4=['read_google_doc','create_google_doc','create_spreadsheet','export_doc_as_pdf','delete_drive_file','create_drive_folder','delete_drive_folder','list_drive_contents','list_script_projects','get_script_content','update_script_file','deploy_script_webapp','backup_script_project','delete_artifact_image','list_run_revisions','delete_run_revision','create_btr_report_doc'];
+  const L5=['call_gemini','call_claude','call_gpt'];
+  const L6=['report_generate_btr_code','report_generate_summary','report_add_gemstone_advice','ops_audit_log_exporter','ops_pattern_match_failure'];
+  const f=(names)=>mcpTools.filter(t=>names.includes(t.name)).map(t=>t.name);
+  const by={L0:f(L0),L1:f(L1),L2:f(L2),L3:f(L3),L4:f(L4),L5:f(L5),L6:f(L6)};
+  const lines=[`\n\n[실제 연결된 MCP 도구 ${mcpTools.length}개 — asterion-mcp]`];
+  if(by.L0.length)lines.push(`L0 VedAstro(${by.L0.length}): ${by.L0.join(', ')}`);
+  if(by.L1.length)lines.push(`L1 BTR+Video(${by.L1.length}): ${by.L1.join(', ')}`);
+  if(by.L2.length)lines.push(`L2 GCloud(${by.L2.length}): ${by.L2.join(', ')}`);
+  if(by.L3.length)lines.push(`L3 SystemOps(${by.L3.length}): ${by.L3.join(', ')}`);
+  if(by.L4.length)lines.push(`L4 Workspace(${by.L4.length}): ${by.L4.join(', ')}`);
+  if(by.L5.length)lines.push(`L5 AI(${by.L5.length}): ${by.L5.join(', ')}`);
+  if(by.L6.length)lines.push(`L6 Report/Ops(${by.L6.length}): ${by.L6.join(', ')}`);
   return lines.join('\n');
 }
 
-function buildClaudeSystem(freestyle, extra) {
-  if (freestyle) return '자유롭게 대화하는 AI 어시스턴트다. 어떤 주제든 제한 없이 답할 수 있다.';
-  const blocks = [{ type:'text', text:ASTERION_BASE + buildMcpToolSection(), cache_control:{type:'ephemeral'} }];
-  if (knowledgeContext.length > 500) blocks.push({ type:'text', text:`[지식베이스]\n${knowledgeContext}`, cache_control:{type:'ephemeral'} });
-  if (extra?.trim()) blocks.push({ type:'text', text:`[추가 시스템]\n${extra.trim()}` });
+function buildClaudeSystem(freestyle,extra){
+  if(freestyle)return '자유롭게 대화하는 AI 어시스턴트다.';
+  const blocks=[{type:'text',text:ASTERION_BASE+buildMcpToolSection(),cache_control:{type:'ephemeral'}}];
+  if(knowledgeContext.length>500)blocks.push({type:'text',text:`[지식베이스]\n${knowledgeContext}`,cache_control:{type:'ephemeral'}});
+  if(extra?.trim())blocks.push({type:'text',text:`[추가 시스템]\n${extra.trim()}`});
   return blocks;
 }
-function buildStringSystem(freestyle, extra) {
-  if (freestyle) return '자유롭게 대화하는 AI 어시스턴트다. 어떤 주제든 제한 없이 답할 수 있다.';
-  const base = ASTERION_BASE + buildMcpToolSection();
-  return [base, knowledgeContext?`[지식베이스]\n${knowledgeContext}`:'', extra?.trim()?`[추가 시스템]\n${extra.trim()}`:''].filter(Boolean).join('\n\n');
+function buildStringSystem(freestyle,extra){
+  if(freestyle)return '자유롭게 대화하는 AI 어시스턴트다.';
+  const base=ASTERION_BASE+buildMcpToolSection();
+  return [base,knowledgeContext?`[지식베이스]\n${knowledgeContext}`:'',extra?.trim()?`[추가 시스템]\n${extra.trim()}`:''].filter(Boolean).join('\n\n');
 }
 
-function normClaude(msgs) {
-  const out = [];
-  for (const m of pruneMessages(msgs)) {
-    const text = (m.content||'').trim(); if (!text) continue;
-    const role = m.role==='assistant'?'assistant':'user';
-    if (out.length && out.at(-1).role===role) out.at(-1).content += '\n'+text; else out.push({ role, content:text });
-  }
-  if (!out.length || out[0].role!=='user') out.unshift({ role:'user', content:'(시작)' });
-  return out;
-}
-function normGemini(msgs) {
-  const out = [];
-  for (const m of pruneMessages(msgs)) {
-    const text = (m.content||'').trim(); if (!text) continue;
-    const role = m.role==='assistant'?'model':'user';
-    if (out.length && out.at(-1).role===role) out.at(-1).parts[0].text += '\n'+text; else out.push({ role, parts:[{text}] });
-  }
-  if (!out.length || out[0].role!=='user') out.unshift({ role:'user', parts:[{text:'(시작)'}] });
-  return out;
-}
-function normGPTInput(msgs, sys) {
-  const out = [];
-  if (sys) out.push({ role:'system', content:sys });
-  for (const m of pruneMessages(msgs)) {
-    const text = (m.content||'').trim(); if (!text) continue;
-    out.push({ role:m.role==='assistant'?'assistant':'user', content:text });
-  }
-  return out;
+function normClaude(msgs){const out=[];for(const m of pruneMessages(msgs)){const text=(m.content||'').trim();if(!text)continue;const role=m.role==='assistant'?'assistant':'user';if(out.length&&out.at(-1).role===role)out.at(-1).content+='\n'+text;else out.push({role,content:text});}if(!out.length||out[0].role!=='user')out.unshift({role:'user',content:'(시작)'});return out;}
+function normGemini(msgs){const out=[];for(const m of pruneMessages(msgs)){const text=(m.content||'').trim();if(!text)continue;const role=m.role==='assistant'?'model':'user';if(out.length&&out.at(-1).role===role)out.at(-1).parts[0].text+='\n'+text;else out.push({role,parts:[{text}]});}if(!out.length||out[0].role!=='user')out.unshift({role:'user',parts:[{text:'(시작)'}]});return out;}
+function normGPTInput(msgs,sys){const out=[];if(sys)out.push({role:'system',content:sys});for(const m of pruneMessages(msgs)){const text=(m.content||'').trim();if(!text)continue;out.push({role:m.role==='assistant'?'assistant':'user',content:text});}return out;}
+
+async function runClaude(apiMsgs,systemBlocks,res){
+  if(!CLAUDE_KEY){writeSSE(res,{error:'ANTHROPIC_API_KEY 미설정'});return;}
+  const mcpSseUrl=MCP_SERVER_URL?buildSSEUrl(MCP_SERVER_URL):null;
+  const headers={'x-api-key':CLAUDE_KEY,'anthropic-version':'2023-06-01','content-type':'application/json','anthropic-beta':'mcp-client-2025-11-20'};
+  const body={model:CLAUDE_MODEL,max_tokens:16000,system:systemBlocks,messages:apiMsgs,thinking:{type:'enabled',budget_tokens:10000}};
+  if(mcpSseUrl){const srv={type:'url',url:mcpSseUrl,name:'asterion-mcp'};if(MCP_SECRET_KEY)srv.authorization_token=MCP_SECRET_KEY;body.mcp_servers=[srv];body.tools=[{type:'mcp_toolset',mcp_server_name:'asterion-mcp',cache_control:{type:'ephemeral'}}];}
+  const response=await fetchWithRetry('https://api.anthropic.com/v1/messages',{method:'POST',headers,body:JSON.stringify(body)});
+  if(!response.ok)throw new Error(`Claude ${response.status}: ${(await response.text()).slice(0,400)}`);
+  const result=await response.json();
+  const usage=result.usage;
+  if(usage?.cache_read_input_tokens>0||usage?.cache_creation_input_tokens>0)console.log(`[Claude Cache] 읽기:${usage.cache_read_input_tokens||0} 쓰기:${usage.cache_creation_input_tokens||0}`);
+  for(const b of(result.content||[])){if(b.type==='mcp_tool_use')writeSSE(res,{tool_call:{id:b.id,name:b.name,input:b.input}});if(b.type==='mcp_tool_result')writeSSE(res,{tool_result:{name:b.name||'tool',ok:!b.is_error}});}
+  for(const b of(result.content||[])){if(b.type==='text'&&b.text)emitChunked(res,b.text);}
 }
 
-async function runClaude(apiMsgs, systemBlocks, res) {
-  if (!CLAUDE_KEY) { writeSSE(res, { error:'ANTHROPIC_API_KEY 미설정' }); return; }
-  const mcpSseUrl = MCP_SERVER_URL ? buildSSEUrl(MCP_SERVER_URL) : null;
-  const headers = { 'x-api-key':CLAUDE_KEY, 'anthropic-version':'2023-06-01', 'content-type':'application/json', 'anthropic-beta':'mcp-client-2025-11-20' };
-  const body = { model:CLAUDE_MODEL, max_tokens:16000, system:systemBlocks, messages:apiMsgs, thinking:{type:'enabled',budget_tokens:10000} };
-  if (mcpSseUrl) {
-    const srv = { type:'url', url:mcpSseUrl, name:'asterion-mcp' };
-    if (MCP_SECRET_KEY) srv.authorization_token = MCP_SECRET_KEY;
-    body.mcp_servers = [srv];
-    body.tools = [{ type:'mcp_toolset', mcp_server_name:'asterion-mcp', cache_control:{type:'ephemeral'} }];
-  }
-  const response = await fetchWithRetry('https://api.anthropic.com/v1/messages', { method:'POST', headers, body:JSON.stringify(body) });
-  if (!response.ok) throw new Error(`Claude ${response.status}: ${(await response.text()).slice(0,400)}`);
-  const result = await response.json();
-  const usage  = result.usage;
-  if (usage?.cache_read_input_tokens > 0 || usage?.cache_creation_input_tokens > 0)
-    console.log(`[Claude Cache] 읽기:${usage.cache_read_input_tokens||0} 쓰기:${usage.cache_creation_input_tokens||0}`);
-  for (const b of (result.content||[])) {
-    if (b.type==='mcp_tool_use')    writeSSE(res, { tool_call:  { id:b.id, name:b.name, input:b.input } });
-    if (b.type==='mcp_tool_result') writeSSE(res, { tool_result:{ name:b.name||'tool', ok:!b.is_error } });
-  }
-  for (const b of (result.content||[])) { if (b.type==='text' && b.text) emitChunked(res, b.text); }
-}
-
-async function runGemini(messages, systemPrompt, res) {
-  if (!GEMINI_KEY) { writeSSE(res, { error:'GEMINI_API_KEY 미설정' }); return; }
-  const url   = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_KEY}`;
-  const tools = mcpTools.length > 0 ? [{ functionDeclarations: mcpTools.map(t=>({ name:t.name, description:t.description, parameters:t.parameters })) }] : undefined;
-  let contents = normGemini(messages), depth = 0;
-  while (depth < MAX_TOOL_DEPTH) {
-    const bodyObj = { systemInstruction:{ parts:[{text:systemPrompt}] }, contents, generationConfig:{ maxOutputTokens:65000, temperature:0.7, topP:0.95 } };
-    if (tools) bodyObj.tools = tools;
-    const response = await fetchWithRetry(url, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(bodyObj) });
-    if (!response.ok) throw new Error(`Gemini ${response.status}: ${(await response.text()).slice(0,400)}`);
-    const result    = await response.json();
-    const candidate = result.candidates?.[0];
-    if (!candidate) throw new Error('Gemini 응답 없음');
-    const parts = candidate.content?.parts || [];
-    const calls = parts.filter(p => p.functionCall);
-    if (calls.length === 0) { for (const p of parts) { if (p.text) emitChunked(res, p.text); } break; }
-    const responses = [];
-    for (const p of calls) {
-      const { name, args } = p.functionCall;
-      writeSSE(res, { tool_call:{ name, input:args } });
-      const r = await callMCPTool(name, args||{});
-      writeSSE(res, { tool_result:{ name, ok:!r.includes('"error"') } });
-      responses.push({ functionResponse:{ name, response:{ result:r } } });
+async function runGemini(messages,systemPrompt,res){
+  if(!GEMINI_KEY){writeSSE(res,{error:'GEMINI_API_KEY 미설정'});return;}
+  const url=`https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_KEY}`;
+  const tools=mcpTools.length>0?[{functionDeclarations:mcpTools.map(t=>({name:t.name,description:t.description,parameters:t.parameters}))}]:undefined;
+  let contents=normGemini(messages),depth=0;
+  while(depth<MAX_TOOL_DEPTH){
+    const bodyObj={systemInstruction:{parts:[{text:systemPrompt}]},contents,generationConfig:{maxOutputTokens:65000,temperature:0.7,topP:0.95}};
+    if(tools)bodyObj.tools=tools;
+    const response=await fetchWithRetry(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(bodyObj)});
+    if(!response.ok)throw new Error(`Gemini ${response.status}: ${(await response.text()).slice(0,400)}`);
+    const result=await response.json();
+    const candidate=result.candidates?.[0];
+    if(!candidate)throw new Error('Gemini 응답 없음');
+    const parts=candidate.content?.parts||[];
+    const calls=parts.filter(p=>p.functionCall);
+    if(calls.length===0){for(const p of parts){if(p.text)emitChunked(res,p.text);}break;}
+    const responses=[];
+    for(const p of calls){
+      const{name,args}=p.functionCall;
+      writeSSE(res,{tool_call:{name,input:args}});
+      const r=await callMCPTool(name,args||{});
+      writeSSE(res,{tool_result:{name,ok:!r.includes('"error"')}});
+      responses.push({functionResponse:{name,response:{result:r}}});
     }
-    contents = [...contents, { role:'model', parts }, { role:'user', parts:responses }];
+    contents=[...contents,{role:'model',parts},{role:'user',parts:responses}];
     depth++;
   }
-  if (depth >= MAX_TOOL_DEPTH) writeSSE(res, { text:'\n[Gemini 도구 최대 깊이 초과]' });
 }
 
-async function runGPT(inputMsgs, res) {
-  if (!OPENAI_KEY) { writeSSE(res, { error:'OPENAI_API_KEY 미설정' }); return; }
-  const mcpSseUrl = MCP_SERVER_URL ? buildSSEUrl(MCP_SERVER_URL) : null;
-  const body = { model:GPT_MODEL, input:inputMsgs, reasoning:{ effort:'medium' } };
-  if (mcpSseUrl) {
-    const tool = { type:'mcp', server_label:'asterion-mcp', server_description:'ASTERION BTR 분석 및 Archive 관리 도구', server_url:mcpSseUrl, require_approval:'never' };
-    if (MCP_SECRET_KEY) tool.authorization = { type:'bearer', token:MCP_SECRET_KEY };
-    body.tools = [tool];
-  }
-  const response = await fetchWithRetry('https://api.openai.com/v1/responses', {
-    method:'POST', headers:{'Authorization':`Bearer ${OPENAI_KEY}`,'Content-Type':'application/json'}, body:JSON.stringify(body),
-  });
-  if (!response.ok) throw new Error(`GPT ${response.status}: ${(await response.text()).slice(0,400)}`);
-  const result = await response.json();
-  for (const item of (result.output||[])) {
-    if (item.type==='message') { for (const c of (item.content||[])) { if (c.type==='text'&&c.text) emitChunked(res, c.text); } }
-    if (item.type==='mcp_call')   writeSSE(res, { tool_call:{ name:item.name, input:item.arguments } });
-    if (item.type==='mcp_result') writeSSE(res, { tool_result:{ name:item.name||'tool', ok:!item.error } });
-  }
+async function runGPT(inputMsgs,res){
+  if(!OPENAI_KEY){writeSSE(res,{error:'OPENAI_API_KEY 미설정'});return;}
+  const mcpSseUrl=MCP_SERVER_URL?buildSSEUrl(MCP_SERVER_URL):null;
+  const body={model:GPT_MODEL,input:inputMsgs,reasoning:{effort:'medium'}};
+  if(mcpSseUrl){const tool={type:'mcp',server_label:'asterion-mcp',server_description:'ASTERION BTR 분석 도구',server_url:mcpSseUrl,require_approval:'never'};if(MCP_SECRET_KEY)tool.authorization={type:'bearer',token:MCP_SECRET_KEY};body.tools=[tool];}
+  const response=await fetchWithRetry('https://api.openai.com/v1/responses',{method:'POST',headers:{'Authorization':`Bearer ${OPENAI_KEY}`,'Content-Type':'application/json'},body:JSON.stringify(body)});
+  if(!response.ok)throw new Error(`GPT ${response.status}: ${(await response.text()).slice(0,400)}`);
+  const result=await response.json();
+  for(const item of(result.output||[])){if(item.type==='message'){for(const c of(item.content||[])){if(c.type==='text'&&c.text)emitChunked(res,c.text);}}if(item.type==='mcp_call')writeSSE(res,{tool_call:{name:item.name,input:item.arguments}});if(item.type==='mcp_result')writeSSE(res,{tool_result:{name:item.name||'tool',ok:!item.error}});}
 }
 
-// ── API Routes ────────────────────────────────────────────
+// ════ API Routes ══════════════════════════════════════════════════════════
+
+// ── TTS Routes ──
+app.get('/api/tts/voices', (_req, res) => {
+  res.json({ voices: KO_VOICES });
+});
+
+app.post('/api/tts', async (req, res) => {
+  const { text, voice = 'ko-KR-SunHiNeural', rate = '+0%', pitch = '+0Hz' } = req.body || {};
+  if (!text?.trim()) return res.status(400).json({ error: '텍스트 없음' });
+  try {
+    const audio = await edgeTTS(text.slice(0, 600), voice, rate, pitch);
+    res.setHeader('Content-Type', 'audio/mpeg');
+    res.setHeader('Content-Length', audio.length);
+    res.setHeader('Cache-Control', 'no-cache');
+    res.send(audio);
+  } catch(e) {
+    console.error('[Edge TTS]', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ── Chat Route ──
 app.post('/api/chat', async (req, res) => {
   const { model='claude', messages=[], system='', freestyle=false } = req.body;
   res.setHeader('Content-Type','text/event-stream');
@@ -350,114 +371,64 @@ app.post('/api/chat', async (req, res) => {
     else if (model==='gemini') await runGemini(messages, buildStringSystem(freestyle,system), res);
     else if (model==='gpt')    await runGPT(normGPTInput(messages, buildStringSystem(freestyle,system)), res);
     else writeSSE(res, { error:`알 수 없는 모델: ${model}` });
-  } catch (error) { console.error('[Chat]', error.message); writeSSE(res, { error:error.message }); }
+  } catch(error) { console.error('[Chat]', error.message); writeSSE(res, { error:error.message }); }
   writeDone(res); res.end();
 });
 
-// ★ SOURCE_FILES 자동 동기화
-// 프론트(showDirectoryPicker) → BGV/BGM 파일명 배열 전달 → Sheets 갱신
+// ── SOURCE_FILES 자동 동기화 ──
 app.post('/api/sync-source-files', async (req, res) => {
-  const {
-    bgv = [],
-    bgm = [],
-    spreadsheet_id = VIDEO_SS_ID
-  } = req.body;
-
+  const { bgv=[], bgm=[], spreadsheet_id=VIDEO_SS_ID } = req.body;
   const tok = await getGCPToken();
   if (!tok) return res.json({ success:false, error:'GCP ADC 인증 실패' });
-
-  const today = new Date().toISOString().slice(0, 10);
+  const today = new Date().toISOString().slice(0,10);
   const rows = [
     ['Type','Filename','Duration_Sec','Category','Tags','Notes','Last_Sync'],
-    ...bgv.map(f => ['BGV', f, '', 'background-video', '', '', today]),
-    ...bgm.map(f => ['BGM', f, '', 'background-music', '', '', today]),
+    ...bgv.map(f => ['BGV',f,'','background-video','','',today]),
+    ...bgm.map(f => ['BGM',f,'','background-music','','',today]),
   ];
-
   try {
-    const r = await fetch(
-      `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheet_id}/values/${encodeURIComponent('SOURCE_FILES!A1')}?valueInputOption=USER_ENTERED`,
-      {
-        method: 'PUT',
-        headers: { Authorization: `Bearer ${tok}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ values: rows })
-      }
-    );
-    if (!r.ok) {
-      const err = await r.text();
-      return res.json({ success:false, error:`Sheets ${r.status}: ${err.slice(0,100)}` });
-    }
-    console.log(`[Sync] SOURCE_FILES 업데이트 — BGV:${bgv.length} BGM:${bgm.length}`);
-    return res.json({
-      success: true,
-      bgv_count: bgv.length,
-      bgm_count: bgm.length,
-      total_files: bgv.length + bgm.length,
-      sheet_rows: rows.length - 1,
-      synced_at: today,
-    });
-  } catch(e) {
-    return res.json({ success:false, error:e.message });
-  }
+    const r = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheet_id}/values/${encodeURIComponent('SOURCE_FILES!A1')}?valueInputOption=USER_ENTERED`, { method:'PUT', headers:{Authorization:`Bearer ${tok}`,'Content-Type':'application/json'}, body:JSON.stringify({values:rows}) });
+    if (!r.ok) return res.json({ success:false, error:`Sheets ${r.status}` });
+    return res.json({ success:true, bgv_count:bgv.length, bgm_count:bgm.length, total_files:bgv.length+bgm.length, sheet_rows:rows.length-1, synced_at:today });
+  } catch(e) { return res.json({ success:false, error:e.message }); }
 });
 
+// ── Notification Routes ──
 app.get('/api/notifications/stream', (req, res) => {
-  res.setHeader('Content-Type',  'text/event-stream');
-  res.setHeader('Cache-Control', 'no-cache');
-  res.setHeader('Connection',    'keep-alive');
-  res.setHeader('X-Accel-Buffering', 'no');
-  fetchBTRNotifications().then(notifs => {
-    res.write(`data: ${JSON.stringify({ notifications: notifs })}\n\n`);
-    lastNotifHash = notifs.map(n => n.id).sort().join(',');
-  }).catch(()=>{ res.write('data: {"notifications":[]}\n\n'); });
-  notifClients.add(res);
-  req.on('close', () => notifClients.delete(res));
-  console.log(`[NotifSSE] 클라이언트 연결 (총 ${notifClients.size}개)`);
+  res.setHeader('Content-Type','text/event-stream');res.setHeader('Cache-Control','no-cache');res.setHeader('Connection','keep-alive');res.setHeader('X-Accel-Buffering','no');
+  fetchBTRNotifications().then(n=>{res.write(`data: ${JSON.stringify({notifications:n})}\n\n`);lastNotifHash=n.map(x=>x.id).sort().join(',');}).catch(()=>res.write('data: {"notifications":[]}\n\n'));
+  notifClients.add(res);req.on('close',()=>notifClients.delete(res));
 });
-
-app.get('/api/notifications', async (_req, res) => {
-  res.json({ notifications: await fetchBTRNotifications() });
-});
-
+app.get('/api/notifications', async (_req, res) => res.json({ notifications: await fetchBTRNotifications() }));
 app.post('/api/notifications/:id/respond', async (req, res) => {
-  const ok = await updateNotifStatus(req.params.id, 'responded');
-  if (ok) { const notifs = await fetchBTRNotifications(); lastNotifHash = notifs.map(n => n.id).sort().join(','); sendToAll({ notifications: notifs }); }
-  res.json({ success: ok });
+  const ok=await updateNotifStatus(req.params.id,'responded');
+  if(ok){const n=await fetchBTRNotifications();lastNotifHash=n.map(x=>x.id).sort().join(',');sendToAll({notifications:n});}
+  res.json({success:ok});
 });
-
 app.delete('/api/notifications/:id', async (req, res) => {
-  const ok = await updateNotifStatus(req.params.id, 'dismissed');
-  if (ok) { const notifs = await fetchBTRNotifications(); lastNotifHash = notifs.map(n => n.id).sort().join(','); sendToAll({ notifications: notifs }); }
-  res.json({ success: ok });
+  const ok=await updateNotifStatus(req.params.id,'dismissed');
+  if(ok){const n=await fetchBTRNotifications();lastNotifHash=n.map(x=>x.id).sort().join(',');sendToAll({notifications:n});}
+  res.json({success:ok});
 });
 
+// ── Status / Utility Routes ──
 app.get('/api/status', (_req, res) => res.json({
-  claude:       { model:CLAUDE_MODEL, thinking:'extended(10k)', mcp:'native-API-connector', api:CLAUDE_KEY?'OK':'⚠ 미설정' },
-  gemini:       { model:GEMINI_MODEL, thinking:'기본값', mcp:`manual(${mcpTools.length}tools)`, api:GEMINI_KEY?'OK':'⚠ 미설정' },
-  gpt:          { model:GPT_MODEL, thinking:'reasoning:medium', mcp:'native-Responses-API', api:OPENAI_KEY?'OK':'⚠ 미설정' },
-  drive:        { status:knowledgeStatus, chars:knowledgeContext.length },
-  mcp:          { connected:!!mcpClient, tools:mcpTools.length, url:MCP_SERVER_URL||'미설정', secretKey:MCP_SECRET_KEY?'✓':'미설정' },
+  claude:     {model:CLAUDE_MODEL,api:CLAUDE_KEY?'OK':'⚠ 미설정'},
+  gemini:     {model:GEMINI_MODEL,api:GEMINI_KEY?'OK':'⚠ 미설정'},
+  gpt:        {model:GPT_MODEL,api:OPENAI_KEY?'OK':'⚠ 미설정'},
+  tts:        {engine:'Edge TTS (Microsoft)',voices:KO_VOICES.length,api_key:'불필요'},
+  drive:      {status:knowledgeStatus,chars:knowledgeContext.length},
+  mcp:        {connected:!!mcpClient,tools:mcpTools.length,url:MCP_SERVER_URL||'미설정'},
   notifClients: notifClients.size,
-  notifSystem:  { sheet:NOTIF_SHEET, poll:'5s SSE', auth:'GCP ADC (SA)' },
-  video_ss:     VIDEO_SS_ID,
+  video_ss:   VIDEO_SS_ID,
 }));
-
-app.post('/api/reload-knowledge', async (_req, res) => {
-  knowledgeContext=''; knowledgeStatus='loading...';
-  await loadDriveKnowledge();
-  res.json({ status:knowledgeStatus });
-});
-
-app.post('/api/reconnect-mcp', async (_req, res) => {
-  mcpClient=null; mcpTools=[];
-  await connectMCP();
-  res.json({ connected:!!mcpClient, tools:mcpTools.length });
-});
+app.post('/api/reload-knowledge', async (_req, res) => { knowledgeContext=''; knowledgeStatus='loading...'; await loadDriveKnowledge(); res.json({status:knowledgeStatus}); });
+app.post('/api/reconnect-mcp', async (_req, res) => { mcpClient=null; mcpTools=[]; await connectMCP(); res.json({connected:!!mcpClient,tools:mcpTools.length}); });
 
 app.listen(PORT, '0.0.0.0', () => {
-  console.log(`🔱 ASTERION Hub v3.9.1 — port ${PORT}`);
-  console.log(`   TTS    : VITS 70-speaker (ORI-Muchim)`);
-  console.log(`   Sync   : /api/sync-source-files → SOURCE_FILES sheet`);
-  console.log(`   Claude : ${CLAUDE_MODEL} | Native MCP ${CLAUDE_KEY?'✓':'✗'}`);
-  console.log(`   Gemini : ${GEMINI_MODEL} | ${GEMINI_KEY?'✓':'✗'}`);
+  console.log(`🔱 ASTERION Hub v4.0 — port ${PORT}`);
+  console.log(`   TTS    : Edge TTS (Microsoft) · ${KO_VOICES.length}개 한국어 화자 · API 키 불필요`);
+  console.log(`   Claude : ${CLAUDE_MODEL} ${CLAUDE_KEY?'✓':'✗'}`);
+  console.log(`   Gemini : ${GEMINI_MODEL} ${GEMINI_KEY?'✓':'✗'}`);
   console.log(`   MCP    : ${MCP_SERVER_URL||'미설정'} | tools:${mcpTools.length}`);
 });

@@ -1,7 +1,7 @@
 {
   "name": "asterion-hub-backend",
-  "version": "2.7.0",
-  "description": "ASTERION Hub Chat Backend (Anthropic API + Gemini API + OpenAI API + MCP)",
+  "version": "4.0.0",
+  "description": "ASTERION Hub Chat Backend — Edge TTS + MCP",
   "main": "index.js",
   "type": "module",
   "scripts": {
@@ -12,6 +12,7 @@
     "cors":                         "^2.8.5",
     "googleapis":                   "^140.0.0",
     "@modelcontextprotocol/sdk":    "^1.0.1",
-    "eventsource":                  "^2.0.2"
+    "eventsource":                  "^2.0.2",
+    "ws":                           "^8.18.0"
   }
 }
