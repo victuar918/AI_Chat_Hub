@@ -9,7 +9,6 @@
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css" crossorigin="anonymous"/>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/9.1.6/marked.min.js" crossorigin="anonymous"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js" crossorigin="anonymous"></script>
-<!-- lamejs 불필요 — Edge TTS가 서버에서 직접 MP3 반환 -->
 <style>
 :root{--gold:#c9a96e;--gold-lt:#e8d5a3;--gold-a:rgba(201,169,110,.14);--gold-b:rgba(201,169,110,.07);--bg:#080604;--bg1:#0e0b07;--bg2:#161210;--bg3:#1e1a14;--bdr:rgba(201,169,110,.20);--bdr2:rgba(201,169,110,.09);--tx:#ddd0b8;--tx2:#a08c6e;--tx3:#6b5c44;--green:#5a8a6a;--red:#9a5040;--btr-c:rgba(180,100,50,.20);--btr-b:rgba(200,120,60,.35);--btr-tx:rgba(230,150,80,.95);}
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}html{-webkit-text-size-adjust:100%}
@@ -47,7 +46,6 @@ body{height:100dvh;background:var(--bg);color:var(--tx);font-family:'Noto Sans K
 .hitem-icon{font-size:12px;flex-shrink:0;opacity:.6;}.hitem-body{flex:1;min-width:0;}.hitem-title{font-size:12px;color:var(--tx);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}.hitem.active .hitem-title{color:var(--gold);}
 .hitem-meta{font-size:10px;color:var(--tx3);font-family:'JetBrains Mono',monospace;margin-top:1px;}
 .hitem-del{background:none;border:none;color:var(--tx3);font-size:13px;cursor:pointer;padding:3px 5px;border-radius:5px;opacity:0;transition:opacity .15s;flex-shrink:0;line-height:1;}.hitem:hover .hitem-del{opacity:1;}.hitem-del:hover{color:var(--red);}
-/* MP3 모달 */
 #mp3-modal{display:none;position:fixed;inset:0;z-index:200;align-items:center;justify-content:center;}
 #mp3-modal.show{display:flex;}
 .modal-overlay{position:absolute;inset:0;background:rgba(0,0,0,.7);backdrop-filter:blur(4px);}
@@ -93,12 +91,12 @@ body{height:100dvh;background:var(--bg);color:var(--tx);font-family:'Noto Sans K
 #sys-ta{width:100%;background:var(--bg2);border:1px solid var(--bdr);border-radius:6px;color:var(--tx2);font-family:'JetBrains Mono',monospace;font-size:11px;line-height:1.6;padding:8px 10px;resize:none;height:70px;outline:none;}#sys-ta:focus{border-color:var(--gold)}#sys-ta::placeholder{color:var(--tx3)}
 #settings-panel{background:var(--bg1);padding:0 14px;max-height:0;overflow:hidden;transition:max-height .35s ease,padding .35s ease;flex-shrink:0;}#settings-panel.open{max-height:80dvh;overflow-y:auto;padding:12px 14px;border-top:1px solid var(--bdr2)}
 .sp-section{margin-bottom:18px}.sp-title{font-family:'Cinzel',serif;font-size:9px;letter-spacing:2px;color:var(--gold);margin-bottom:8px;padding-bottom:4px;border-bottom:1px solid var(--bdr2);display:flex;align-items:center;gap:8px;}
-.sp-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;gap:8px;}.sp-label{font-size:11px;color:var(--tx2);flex-shrink:0}.sp-val{font-size:11px;color:var(--tx3);font-family:'JetBrains Mono',monospace;min-width:36px;text-align:right;flex-shrink:0}
+.sp-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;gap:8px;}.sp-label{font-size:11px;color:var(--tx2);flex-shrink:0}.sp-val{font-size:11px;color:var(--tx3);font-family:'JetBrains Mono',monospace;min-width:48px;text-align:right;flex-shrink:0}
 input[type=range]{-webkit-appearance:none;flex:1;height:3px;background:var(--bdr);border-radius:2px;outline:none;}input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:16px;height:16px;border-radius:50%;background:var(--gold);cursor:pointer;}
-select{background:var(--bg2);border:1px solid var(--bdr);color:var(--tx2);border-radius:6px;padding:5px 8px;font-size:11px;outline:none;font-family:'Noto Sans KR',sans-serif;max-width:160px;}
+select{background:var(--bg2);border:1px solid var(--bdr);color:var(--tx2);border-radius:6px;padding:5px 8px;font-size:11px;outline:none;font-family:'Noto Sans KR',sans-serif;max-width:170px;}
 .sp-btn{background:var(--bg3);border:1px solid var(--bdr2);border-radius:10px;padding:5px 14px;font-size:10px;color:var(--tx3);cursor:pointer;font-family:'Cinzel',serif;letter-spacing:1px;transition:all .18s;white-space:nowrap;}.sp-btn:hover{border-color:var(--gold);color:var(--gold)}.sp-btn.playing{background:var(--gold-a);border-color:rgba(201,169,110,.35);color:var(--gold)}.sp-btn.danger{border-color:rgba(154,80,64,.35)}.sp-btn.danger:hover{border-color:var(--red);color:var(--red)}.sp-btn:disabled{opacity:.4;cursor:default}
 .sp-badge{background:var(--gold-b);border:1px solid var(--bdr2);border-radius:8px;padding:2px 8px;font-size:9px;color:var(--tx3);font-family:'Cinzel',serif;letter-spacing:1px;}.sp-badge.ready{background:rgba(90,138,106,.12);border-color:rgba(90,138,106,.3);color:var(--green);}
-.sp-info{font-size:11px;color:var(--tx3);line-height:1.7;padding:4px 0}.sp-info a{color:var(--gold);text-decoration:none}
+.sp-info{font-size:11px;color:var(--tx3);line-height:1.7;padding:4px 0}
 #ctrl{background:var(--bg1);border-top:1px solid var(--bdr2);padding:8px 14px 0;display:flex;align-items:center;gap:6px;flex-shrink:0;overflow-x:auto;-webkit-overflow-scrolling:touch;}#ctrl::-webkit-scrollbar{display:none}
 .cbtn{background:var(--bg2);border:1px solid var(--bdr2);border-radius:16px;padding:5px 11px;font-size:11px;color:var(--tx3);cursor:pointer;font-family:'Cinzel',serif;letter-spacing:1px;transition:all .18s;white-space:nowrap;flex-shrink:0;}.cbtn:hover{border-color:var(--bdr);color:var(--tx2)}.cbtn.on{background:var(--gold-a);color:var(--gold);border-color:rgba(201,169,110,.3)}.cbtn.on-red{background:rgba(154,80,64,.15);color:var(--red);border-color:rgba(154,80,64,.3)}
 #kb-chip{display:flex;align-items:center;gap:5px;background:var(--bg2);border:1px solid var(--bdr2);border-radius:16px;padding:5px 10px;font-size:11px;color:var(--tx3);cursor:pointer;transition:all .18s;white-space:nowrap;flex-shrink:0;}#kb-dot{width:6px;height:6px;border-radius:50%;background:var(--tx3);flex-shrink:0}
@@ -109,7 +107,7 @@ select{background:var(--bg2);border:1px solid var(--bdr);color:var(--tx2);border
 #uinput{flex:1;background:none;border:none;outline:none;color:var(--tx);font-family:'Noto Sans KR',sans-serif;font-size:14px;line-height:1.6;resize:none;max-height:160px;min-height:22px;overflow-y:auto;}#uinput::placeholder{color:var(--tx3)}
 #send{width:34px;height:34px;background:var(--gold-a);border:1px solid rgba(201,169,110,.28);color:var(--gold);border-radius:8px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;transition:all .18s;}#send:hover:not(:disabled){background:rgba(201,169,110,.24)}#send:disabled{opacity:.35;cursor:default}
 .hint-row{display:flex;justify-content:space-between;padding:4px 2px 0;font-size:10px;color:var(--tx3);font-family:'JetBrains Mono',monospace;}
-#toast{position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:var(--bg3);border:1px solid var(--bdr);border-radius:20px;padding:8px 18px;font-size:12px;color:var(--tx2);opacity:0;pointer-events:none;transition:opacity .25s;z-index:99;white-space:nowrap;max-width:90vw;overflow:hidden;text-overflow:ellipsis;}#toast.on{opacity:1}
+#toast{position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:var(--bg3);border:1px solid var(--bdr);border-radius:20px;padding:8px 18px;font-size:12px;color:var(--tx2);opacity:0;pointer-events:none;transition:opacity .25s;z-index:99;white-space:nowrap;max-width:92vw;overflow:hidden;text-overflow:ellipsis;}#toast.on{opacity:1}
 #tts-progress{position:fixed;bottom:70px;left:50%;transform:translateX(-50%);background:var(--bg3);border:1px solid var(--gold);border-radius:20px;padding:6px 16px;font-size:11px;color:var(--gold);opacity:0;pointer-events:none;transition:opacity .25s;z-index:100;font-family:'Cinzel',serif;letter-spacing:1px;display:none;}#tts-progress.show{opacity:1;display:block}
 </style>
 </head>
@@ -131,7 +129,6 @@ select{background:var(--bg2);border:1px solid var(--bdr);color:var(--tx2);border
   <div id="hist-list"></div>
   <div id="hist-empty" style="display:none;padding:20px 14px;text-align:center;font-size:12px;color:var(--tx3);font-family:'Cinzel',serif;letter-spacing:1px;">저장된 대화가 없습니다</div>
 </div>
-<!-- MP3 모달 -->
 <div id="mp3-modal">
   <div class="modal-overlay" onclick="closeMp3Modal()"></div>
   <div class="modal-box">
@@ -140,7 +137,7 @@ select{background:var(--bg2);border:1px solid var(--bdr);color:var(--tx2);border
       <button class="modal-hdr-close" onclick="closeMp3Modal()">✕</button>
     </div>
     <div class="modal-body">
-      <textarea id="mp3-ta" maxlength="5000" placeholder="변환할 텍스트를 입력하세요 (최대 5000자)" oninput="updateMp3Count()"></textarea>
+      <textarea id="mp3-ta" maxlength="5000" placeholder="변환할 텍스트 (최대 5000자)" oninput="updateMp3Count()"></textarea>
       <div class="modal-count"><span id="mp3-count">0</span> / 5000</div>
       <div id="mp3-progress-area">
         <div class="mp3-prog-bar"><div class="mp3-prog-fill" id="mp3-prog-fill"></div></div>
@@ -172,14 +169,15 @@ select{background:var(--bg2);border:1px solid var(--bdr);color:var(--tx2);border
 <div id="sys-panel"><textarea id="sys-ta" placeholder="추가 시스템 지시 (기본 프롬프트에 append)"></textarea></div>
 
 <div id="settings-panel">
-  <!-- Edge TTS v4.0 -->
+  <!-- Edge TTS v4.0.1 -->
   <div class="sp-section">
-    <div class="sp-title">🎙 Edge TTS <span class="sp-badge ready">즉시 사용 가능</span></div>
-    <div class="sp-info">Microsoft Edge 내장 TTS · 한국어 8화자 · 모델 로드 없음 · 무료</div>
+    <div class="sp-title">🎙 Edge TTS <span class="sp-badge ready">서버사이드 · 즉시 사용</span></div>
+    <div class="sp-info" id="tts-status-msg">Microsoft Edge TTS · 한국어 8화자 · 누락 없음</div>
     <div class="sp-row" style="gap:6px;margin-bottom:10px;flex-wrap:wrap;">
       <button class="sp-btn" id="st-test-btn" onclick="testTts()">▶ 테스트</button>
       <button class="sp-btn" onclick="openMp3Modal()">🎵 MP3</button>
     </div>
+    <!-- 화자 선택 -->
     <div class="sp-row">
       <span class="sp-label">화자</span>
       <select id="tts-voice" onchange="saveTtsPref()">
@@ -193,12 +191,19 @@ select{background:var(--bg2);border:1px solid var(--bdr);color:var(--tx2);border
         <option value="ko-KR-SeoHyeonNeural">서현 (여성)</option>
       </select>
     </div>
+    <!-- 속도 -->
     <div class="sp-row">
       <span class="sp-label">속도</span>
       <input type="range" id="tts-rate-range" min="-50" max="100" step="5" value="0" oninput="updateRateVal()"/>
       <span class="sp-val" id="tts-rate-val">+0%</span>
     </div>
-    <div class="sp-info" style="font-size:10px;margin-top:4px;">누락 없음 · 서버사이드 합성 · 음성별 MP3 파일명 자동 기록</div>
+    <!-- 피치 ★ 신규 -->
+    <div class="sp-row">
+      <span class="sp-label">피치</span>
+      <input type="range" id="tts-pitch-range" min="-50" max="50" step="5" value="0" oninput="updatePitchVal()"/>
+      <span class="sp-val" id="tts-pitch-val">+0Hz</span>
+    </div>
+    <div class="sp-info" style="font-size:10px;margin-top:2px;">속도 · 피치 기본값 = 0 · 설정은 자동 저장됨</div>
   </div>
   <!-- SOURCE_FILES 동기화 -->
   <div class="sp-section">
@@ -207,7 +212,6 @@ select{background:var(--bg2);border:1px solid var(--bdr);color:var(--tx2);border
     <div class="sp-row" style="margin-top:6px;">
       <button class="sp-btn" id="sync-btn" onclick="syncSourceFiles()">📁 BGV + BGM 동기화</button>
     </div>
-    <div class="sp-info" style="font-size:10px;margin-top:4px;">Android 폴더 스캔 → SOURCE_FILES 시트 업데이트</div>
   </div>
   <!-- 대화 기록 -->
   <div class="sp-section">
@@ -240,8 +244,8 @@ select{background:var(--bg2);border:1px solid var(--bdr);color:var(--tx2);border
 
 <script>
 const S={model:'claude',messages:[],streaming:false,freestyle:false,currentConvId:null};
-// Edge TTS 설정
-const STP={voice:'ko-KR-SunHiNeural',rate:'+0%'};
+// Edge TTS 설정 — 속도(rate)/피치(pitch) 포함
+const STP={voice:'ko-KR-SunHiNeural',rate:'+0%',pitch:'+0Hz'};
 let pendingNotifs=[],btrOpen=false,histOpen=false,sseConn=null;
 const MODEL_STYLE={
   claude:{avClass:'a-claude',whoClass:'claude',label:'CLAUDE',icon:'✦'},
@@ -261,11 +265,7 @@ function renderHistoryList(){const convs=loadConversations(),list=document.getEl
 function toggleHistory(){histOpen=!histOpen;document.getElementById('hist-panel').classList.toggle('open',histOpen);document.getElementById('hist-btn').classList.toggle('on',histOpen);if(histOpen){renderHistoryList();closeOtherPanels('hist');}}
 function clearAllHistory(){if(!confirm('저장된 모든 대화를 삭제하시겠습니까?'))return;localStorage.removeItem(CONV_KEY);S.messages=[];S.currentConvId=null;document.getElementById('msgs').innerHTML=emptyHTML();renderHistoryList();toast('전체 대화 기록 삭제됨');}
 
-// ══ Edge TTS v4.0 ══
-// 서버(/api/tts)에서 MP3 직접 수신 → Audio 재생
-// 누락 없음 · 모델 로드 없음 · lamejs 불필요
-let activeAudio=null,activeBtn=null,activeTtsStop=false;
-
+// ══ TTS 설정 핸들러 ══
 function saveTtsPref(){
   STP.voice=document.getElementById('tts-voice').value;
   save();
@@ -276,14 +276,30 @@ function updateRateVal(){
   document.getElementById('tts-rate-val').textContent=STP.rate;
   save();
 }
+function updatePitchVal(){
+  const v=parseInt(document.getElementById('tts-pitch-range').value);
+  STP.pitch=(v>=0?'+':'')+v+'Hz';
+  document.getElementById('tts-pitch-val').textContent=STP.pitch;
+  save();
+}
+
+// ══ Edge TTS — 서버사이드 (v4.0.1) ══
+// /api/tts POST {text, voice, rate, pitch} → audio/mpeg 반환
+// ★ 실제 에러 메시지 표시 (TTS API 500 대신 구체적 원인)
+let activeAudio=null,activeBtn=null,activeTtsStop=false;
 
 async function fetchTtsChunk(text){
   const res=await fetch('/api/tts',{
     method:'POST',
     headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({text,voice:STP.voice,rate:STP.rate})
+    body:JSON.stringify({text,voice:STP.voice,rate:STP.rate,pitch:STP.pitch})
   });
-  if(!res.ok)throw new Error('TTS API '+res.status);
+  if(!res.ok){
+    // 서버의 실제 에러 메시지 추출
+    let errMsg='TTS 서버 오류 ('+res.status+')';
+    try{const j=await res.json();if(j.error)errMsg=j.error;}catch(_){}
+    throw new Error(errMsg);
+  }
   return await res.blob();
 }
 
@@ -293,7 +309,7 @@ async function playBlob(blob){
     const audio=new Audio(url);
     activeAudio=audio;
     audio.onended=()=>{URL.revokeObjectURL(url);activeAudio=null;resolve();};
-    audio.onerror=()=>{URL.revokeObjectURL(url);activeAudio=null;reject(new Error('재생 오류'));};
+    audio.onerror=(e)=>{URL.revokeObjectURL(url);activeAudio=null;reject(new Error('재생 실패'));};
     if(activeTtsStop){URL.revokeObjectURL(url);resolve();return;}
     audio.play().catch(reject);
   });
@@ -322,7 +338,7 @@ async function speakText(text,btnEl){
       await playBlob(blob);
     }
   }catch(e){
-    if(!activeTtsStop)toast(e.message.slice(0,80),5000);
+    if(!activeTtsStop)toast(e.message,6000);  // ★ 실제 에러 표시
   }
   hideTtsProgress();
   if(!activeTtsStop)resetBtn(btnEl);
@@ -342,13 +358,15 @@ function splitTextChunks(text){
   return chunks.filter(c=>c.length>0);
 }
 
-async function testTts(){await speakText('안녕하세요. 아스터리언입니다. '+voiceShortName()+' 화자 테스트입니다.',document.getElementById('st-test-btn'));}
+async function testTts(){
+  await speakText('안녕하세요. 아스터리언입니다. '+voiceShortName()+' 화자 테스트입니다.',document.getElementById('st-test-btn'));
+}
 function resetBtn(b){if(b){b.innerHTML='▶ 재생';b.classList.remove('playing');}if(activeBtn===b)activeBtn=null;}
 function stripMd(t){return t.replace(/#{1,6}\s/g,'').replace(/\*\*([^*]+)\*\*/g,'$1').replace(/\*([^*]+)\*/g,'$1').replace(/`[^`]+`/g,'').replace(/\n+/g,' ').replace(/\[([^\]]+)\]\([^)]+\)/g,'$1').trim();}
 function showTtsProgress(msg){const el=document.getElementById('tts-progress');el.textContent=msg;el.classList.add('show');}
 function hideTtsProgress(){document.getElementById('tts-progress').classList.remove('show');}
 
-// ══ MP3 저장 — Edge TTS MP3 청크 직접 연결 (lamejs 불필요) ══
+// ══ MP3 저장 ══
 let mp3Exporting=false;
 function openMp3Modal(){document.getElementById('mp3-modal').classList.add('show');document.getElementById('mp3-ta').value='';document.getElementById('mp3-count').textContent='0';document.getElementById('mp3-progress-area').style.display='none';document.getElementById('mp3-create-btn').disabled=false;document.getElementById('mp3-ta').focus();}
 function closeMp3Modal(){if(mp3Exporting)return;document.getElementById('mp3-modal').classList.remove('show');}
@@ -359,30 +377,24 @@ async function startMp3Export(){
   const text=document.getElementById('mp3-ta').value.trim();
   if(!text){toast('텍스트를 입력하세요');return;}if(mp3Exporting)return;
   mp3Exporting=true;document.getElementById('mp3-create-btn').disabled=true;
-  document.getElementById('mp3-progress-area').style.display='block';
-  setMp3Progress(0,'분할 중...');
+  document.getElementById('mp3-progress-area').style.display='block';setMp3Progress(0,'분할 중...');
   try{
-    const chunks=splitTextChunks(text);
-    const mp3Buffers=[];
+    const chunks=splitTextChunks(text);const mp3Buffers=[];
     for(let i=0;i<chunks.length;i++){
       setMp3Progress(Math.round(i/chunks.length*90),`합성 중... ${i+1}/${chunks.length} [${voiceShortName()}]`);
-      const res=await fetch('/api/tts',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:chunks[i],voice:STP.voice,rate:STP.rate})});
-      if(!res.ok)throw new Error('TTS API '+res.status);
+      const res=await fetch('/api/tts',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:chunks[i],voice:STP.voice,rate:STP.rate,pitch:STP.pitch})});
+      if(!res.ok){let e='TTS '+res.status;try{const j=await res.json();if(j.error)e=j.error;}catch(_){}throw new Error(e);}
       mp3Buffers.push(new Uint8Array(await res.arrayBuffer()));
     }
-    setMp3Progress(93,'MP3 조합 중...');
-    // Edge TTS가 이미 MP3로 반환 → 그대로 연결
-    const total=mp3Buffers.reduce((s,b)=>s+b.length,0);
-    const merged=new Uint8Array(total);let off=0;
+    setMp3Progress(94,'MP3 조합 중...');
+    const total=mp3Buffers.reduce((s,b)=>s+b.length,0),merged=new Uint8Array(total);let off=0;
     for(const b of mp3Buffers){merged.set(b,off);off+=b.length;}
     setMp3Progress(97,'저장 중...');
     const blob=new Blob([merged],{type:'audio/mpeg'});
-    const vname=voiceShortName();
-    await saveMp3File(blob,`asterion_${vname}_${Date.now()}.mp3`);
-    setMp3Progress(100,'완료 ✓');toast('MP3 저장 완료 ✓');
-    setTimeout(()=>closeMp3Modal(),1200);
+    await saveMp3File(blob,`asterion_${voiceShortName()}_${Date.now()}.mp3`);
+    setMp3Progress(100,'완료 ✓');toast('MP3 저장 완료 ✓');setTimeout(()=>closeMp3Modal(),1200);
   }catch(e){
-    toast('MP3 실패: '+e.message.slice(0,60),6000);
+    toast('MP3 실패: '+e.message.slice(0,80),6000);
     document.getElementById('mp3-progress-area').style.display='none';
     document.getElementById('mp3-create-btn').disabled=false;
   }
@@ -470,7 +482,7 @@ function appendMsg(role,content,empty){
   const isU=role==='user',ms=MODEL_STYLE[S.model]||MODEL_STYLE.claude;
   const now=new Date().toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'});
   const row=document.createElement('div');row.className='row';
-  row.innerHTML='<div class="av '+(isU?'u':ms.avClass)+'">'+(isU?'U':ms.icon)+'</div><div class="mb2"><div class="meta"><span class="who '+(isU?'u':ms.whoClass)+'">'+(isU?'USER':ms.label)+'</span><span class="ts">'+now+'</span></div><div class="cnt '+(isU?'u':'')+'">'+(isU?esc(content).replace(/\n/g,'<br>'):(content?marked.parse(content):''))+'</div></div>';
+  row.innerHTML='<div class="av '+(isU?'u':ms.avClass)+'\">'+(isU?'U':ms.icon)+'</div><div class="mb2"><div class="meta"><span class="who '+(isU?'u':ms.whoClass)+'\">'+(isU?'USER':ms.label)+'</span><span class="ts">'+now+'</span></div><div class="cnt '+(isU?'u':'')+'\">'+(isU?esc(content).replace(/\n/g,'<br>'):(content?marked.parse(content):''))+'</div></div>';
   document.getElementById('msgs').appendChild(row);
   if(!empty){hljs.highlightAll();addCopyBtns();scrollBot();if(!isU&&content)addTtsBtn(row,content);}
   return row;
@@ -502,12 +514,17 @@ async function init(){
     S.model=d.model||'claude';S.freestyle=d.freestyle||false;
     STP.voice=d.voice||'ko-KR-SunHiNeural';
     STP.rate=d.rate||'+0%';
+    STP.pitch=d.pitch||'+0Hz';
   }catch(_){}
   setModel(S.model,false);if(S.freestyle)applyFreestyle(false);
+  // UI 복원
   document.getElementById('tts-voice').value=STP.voice;
   const rateNum=parseInt(STP.rate)||0;
   document.getElementById('tts-rate-range').value=rateNum;
   document.getElementById('tts-rate-val').textContent=STP.rate;
+  const pitchNum=parseInt(STP.pitch)||0;
+  document.getElementById('tts-pitch-range').value=pitchNum;
+  document.getElementById('tts-pitch-val').textContent=STP.pitch;
   marked.setOptions({breaks:true,gfm:true,highlight:(c,l)=>{if(l&&hljs.getLanguage(l))return hljs.highlight(c,{language:l}).value;return hljs.highlightAuto(c).value;}});
   const convs=loadConversations();
   const sorted=Object.values(convs).sort((a,b)=>b.updated_at>a.updated_at?1:-1);
@@ -520,11 +537,9 @@ async function init(){
     }
   }
   checkStatus();connectNotifSSE();
-  // Edge TTS: 서버 연결 테스트 (선택적)
-  console.log('🎙 Edge TTS 준비 완료 — 화자:', voiceShortName());
 }
 function save(){
-  localStorage.setItem(PREF_KEY,JSON.stringify({model:S.model,freestyle:S.freestyle,voice:STP.voice,rate:STP.rate}));
+  localStorage.setItem(PREF_KEY,JSON.stringify({model:S.model,freestyle:S.freestyle,voice:STP.voice,rate:STP.rate,pitch:STP.pitch}));
 }
 
 init();
