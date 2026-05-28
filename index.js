@@ -1,8 +1,9 @@
 /**
- * ASTERION Hub — Chat Backend v4.0.1
- * v4.0.1: Edge TTS 엔진 안정화 — ws 직접 구현 → msedge-tts 패키지
- *   pitch 파라미터 지원 추가
- * v4.0: TTS 엔진 교체 — Edge TTS (Microsoft, 한국어 8화자)
+ * ASTERION Hub — Chat Backend v4.2
+ * v4.2: TTS → 브라우저 사이드 (Supertonic 2 ONNX, transformers.js)
+ *   서버에서 TTS 코드 제거. /api/tts 엔드포인트 없음.
+ * v4.0.1: Edge TTS → msedge-tts (Microsoft IP 차단으로 실패)
+ * v4.0: Edge TTS 시도
  */
 
 import express    from 'express';
@@ -11,7 +12,6 @@ import { google } from 'googleapis';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js';
 import EventSource from 'eventsource';
-import { MsEdgeTTS, OUTPUT_FORMAT } from 'msedge-tts';
 import { fileURLToPath } from 'url';
 import { dirname, join }  from 'path';
 
@@ -57,54 +57,8 @@ async function getGCPToken() {
   } catch { return null; }
 }
 
-// ════ EDGE TTS (msedge-tts 패키지) ════════════════════════════════════════════════
-const KO_VOICES = [
-  { id:'ko-KR-SunHiNeural',    name:'선희',   gender:'F', desc:'따뜻하고 자연스러운 여성' },
-  { id:'ko-KR-InJoonNeural',   name:'인준',   gender:'M', desc:'안정감 있는 남성' },
-  { id:'ko-KR-YuJinNeural',    name:'유진',   gender:'F', desc:'밝고 활기찬 여성' },
-  { id:'ko-KR-HyunsuNeural',   name:'현수',   gender:'M', desc:'젊고 친근한 남성' },
-  { id:'ko-KR-BongJinNeural',  name:'봉진',   gender:'M', desc:'상당한 차분한 남성' },
-  { id:'ko-KR-GookMinNeural',  name:'국민',   gender:'M', desc:'깊고 신뢰감 있는 남성' },
-  { id:'ko-KR-JiMinNeural',    name:'지민',   gender:'F', desc:'부드럽고 감성적인 여성' },
-  { id:'ko-KR-SeoHyeonNeural', name:'서현',   gender:'F', desc:'릎려한 전문적인 여성' },
-];
-
-async function edgeTTS(text, voice='ko-KR-SunHiNeural', rate='+0%', pitch='+0Hz'){
-  const tts = new MsEdgeTTS();
-  // setMetadata(voice, outputFormat, voiceLocale?)
-  await tts.setMetadata(voice, OUTPUT_FORMAT.AUDIO_24KHZ_48KBITRATE_MONO_MP3, 'ko-KR');
-
-  return new Promise((resolve, reject) => {
-    const chunks = [];
-    const timer = setTimeout(() => reject(new Error('Edge TTS timeout (25s)')), 25000);
-
-    let readable;
-    try {
-      // toStream(text, speed?, pitch?, rate?, volume?)
-      // speed: speaking speed, rate: prosody rate, pitch: prosody pitch
-      readable = tts.toStream(text, /* speed */ undefined, pitch, rate);
-    } catch(e) {
-      clearTimeout(timer);
-      return reject(new Error('TTS init: ' + e.message));
-    }
-
-    readable.on('data', chunk => {
-      if (Buffer.isBuffer(chunk)) chunks.push(chunk);
-    });
-    readable.on('end', () => {
-      clearTimeout(timer);
-      if (chunks.length === 0) return reject(new Error('Edge TTS: 오디오 데이터 없음'));
-      resolve(Buffer.concat(chunks));
-    });
-    readable.on('error', e => {
-      clearTimeout(timer);
-      reject(new Error('Edge TTS stream: ' + e.message));
-    });
-  });
-}
-
-// ════ Drive KB ══════════════════════════════════════════════════════════
-const ASTERION_BASE = `너는 ASTERION의 내부 전용 AI다. ASTERION은 베딕 점성술(Lahiri 아야남샤)과 명리학을 결합한 에너지 공학 기반 분석 엔진이다. BTR(Birth Time Rectification)을 통해 개인 표준시를 확정하고, S-Class(97점↑ Hard Stop) 달성 이후에만 분석 결과물이 생성된다. asterion-mcp의 모든 도구를 자유롭게 사용한다.\n\n[운영 중인 시스템]\n- Archive GAS     : StructureCode 관리, PDF 생성, ExpireDate 기반 개인정보 삭제\n- 3자 루브릭      : Claude × Gemini × GPT, Hard Stop = 세 AI 97점↑ AND critical_issues 없음\n- ASTERION Flow   : BTR Result Code 기반 구독 분석 (Annual/Monthly/Weekly)\n- asterion-mcp    : L0~L6 단일 MCP 서버 (84개 도구), Cloud Run 배포\n\n[핵심 스프레드시트 ID]\n- Archive:        1ym1cgr1apEyTlqtJXqrfdnLjoyJTh086CjGycMcUOS8\n- VideoAuto:      1ugWJmyLItD95Vz7Jq8Wjxn0_Ml5REjrhUxNZVFoIFmc\n- JuliarCalendar: 1whKvFyWmb-qbR6OJt5dcI6WOJMLB5MUIzNMlJBFeq_g\n\n[알림 시스템]\n- BTRNotifications 시트에서 pending 알림 폴링 (5초 간격 SSE)\n- 알림 유형: info_request(추가정보 요청), phase_confirm(Phase 구간 확인)\n\n[중요] 도구 목록을 언급할 때는 반드시 아래 [실제 연결된 MCP 도구] 섹션의 도구 이름만 사용한다.\n운영 요청에 정확성과 무결성을 최우선으로 한다.`;
+// ════ Drive KB ════════════════════════════════════════════════════════
+const ASTERION_BASE = `너는 ASTERION의 내부 전용 AI다. ASTERION은 베딕 점성술(Lahiri 아야남샤)과 명리학을 결합한 에너지 공학 기반 분석 엔진이다. BTR(Birth Time Rectification)을 통해 개인 표준시를 확정하고, S-Class(97점↑ Hard Stop) 달성 이후에만 분석 결과물이 생성된다. asterion-mcp의 모든 도구를 자유롭게 사용한다.\n\n[운영 중인 시스템]\n- Archive GAS     : StructureCode 관리, PDF 생성, ExpireDate 기반 개인정보 삭제\n- 3자 루브릭      : Claude × Gemini × GPT, Hard Stop = 세 AI 97점↑ AND critical_issues 없음\n- ASTERION Flow   : BTR Result Code 기반 구독 분석 (Annual/Monthly/Weekly)\n- asterion-mcp    : L0~L6 단일 MCP 서버, Cloud Run 배포\n\n[핵심 스프레드시트 ID]\n- Archive:        1ym1cgr1apEyTlqtJXqrfdnLjoyJTh086CjGycMcUOS8\n- VideoAuto:      1ugWJmyLItD95Vz7Jq8Wjxn0_Ml5REjrhUxNZVFoIFmc\n- JuliarCalendar: 1whKvFyWmb-qbR6OJt5dcI6WOJMLB5MUIzNMlJBFeq_g\n\n[알림 시스템]\n- BTRNotifications 시트에서 pending 알림 폴링 (5초 간격 SSE)\n\n[중요] 도구 목록을 언급할 때는 반드시 아래 [실제 연결된 MCP 도구] 섹션의 도구 이름만 사용한다.\n운영 요청에 정확성과 무결성을 최우선으로 한다.`;
 
 let knowledgeContext = '', knowledgeStatus = 'not_loaded';
 
@@ -134,7 +88,7 @@ async function loadDriveKnowledge() {
 }
 loadDriveKnowledge();
 
-// ════ MCP Client ══════════════════════════════════════════════════════════
+// ════ MCP Client ════════════════════════════════════════════════════
 let mcpClient = null, mcpTools = [], mcpRetryTimer = null;
 function buildSSEUrl(u) { const s = u.replace(/\/$/, ''); return s.endsWith('/sse') ? s : s + '/sse'; }
 
@@ -163,7 +117,7 @@ async function callMCPTool(name, input) {
   catch (e) { return JSON.stringify({ error: e.message }); }
 }
 
-// ════ BTR Notifications ═══════════════════════════════════════════════════
+// ════ BTR Notifications ════════════════════════════════════════════
 async function fetchBTRNotifications() {
   const tok = await getGCPToken(); if (!tok) return [];
   try {
@@ -190,7 +144,7 @@ function sendToAll(data) { const p = `data: ${JSON.stringify(data)}\n\n`; for (c
 async function notifBackgroundPoll() { try { const n=await fetchBTRNotifications(); const h=n.map(x=>x.id).sort().join(','); if(h!==lastNotifHash){lastNotifHash=h;sendToAll({notifications:n});} } catch(_){} setTimeout(notifBackgroundPoll,5000); }
 notifBackgroundPoll();
 
-// ════ AI Runners ══════════════════════════════════════════════════════════
+// ════ AI Runners ════════════════════════════════════════════════════
 const writeSSE  = (res, p) => res.write(`data: ${JSON.stringify(p)}\n\n`);
 const writeDone = (res)    => res.write('data: [DONE]\n\n');
 async function fetchWithRetry(url, options, max = 3) { for (let i = 0; i < max; i++) { const r = await fetch(url, options); if ((r.status===429||r.status===503) && i<max-1) { await new Promise(r=>setTimeout(r,Math.pow(2,i)*1500+Math.random()*500)); continue; } return r; } }
@@ -202,8 +156,8 @@ function buildMcpToolSection() {
   const L0=['geocode_location','get_timezone','get_planet_positions','get_house_positions','get_navamsa_chart','get_ascendant','get_planet_in_house','get_planet_in_sign','get_current_dasha','get_dasha_timeline','get_dasha_sandhi','get_birth_nakshatra','get_planet_yogas','get_transit_planets','get_full_chart_analysis','get_horoscope_predictions','get_match_report','get_numerology_prediction','get_ashtakvarga_data','astro_check_retrograde','astro_planetary_war_check'];
   const L1=['create_btr_session','save_runtime_snapshot','get_runtime_snapshot','purge_runtime_state','save_evolution_log','get_evolution_history','validate_sclass_gate','btr_init_candidate_slots','btr_consensus_analyzer','btr_conflict_axis_finder','btr_re_eval_pivots','btr_weight_adjuster','btr_prediction_tester','btr_write_notification','btr_finalize_confirmed','btr_finalize_held','init_btr_sheets','video_init_sheets','video_create_script','video_read_script','video_update_row_status','video_delete_script'];
   const L2=['gcloud_submit','cloudbuild_status','cloudrun_services','artifact_list','cloudrun_set_env','agent_registry_list','agent_registry_register'];
-  const L3=['github_read_file','github_write_file','github_list_files','gh_push_files','sheets_read','sheets_write','http_request','get_system_status','append_sheet_row'];
-  const L4=['read_google_doc','create_google_doc','create_spreadsheet','export_doc_as_pdf','delete_drive_file','create_drive_folder','delete_drive_folder','list_drive_contents','list_script_projects','get_script_content','update_script_file','deploy_script_webapp','backup_script_project','delete_artifact_image','list_run_revisions','delete_run_revision','create_btr_report_doc'];
+  const L3=['github_read_file','github_write_file','github_list_files','gh_push_files','github_patch_file','sheets_read','sheets_write','sheets_update_row','http_request','get_system_status','append_sheet_row'];
+  const L4=['read_google_doc','create_google_doc','docs_patch','create_spreadsheet','export_doc_as_pdf','delete_drive_file','create_drive_folder','delete_drive_folder','list_drive_contents','list_script_projects','get_script_content','update_script_file','deploy_script_webapp','backup_script_project','delete_artifact_image','list_run_revisions','delete_run_revision','create_btr_report_doc'];
   const L5=['call_gemini','call_claude','call_gpt'];
   const L6=['report_generate_btr_code','report_generate_summary','report_add_gemstone_advice','ops_audit_log_exporter','ops_pattern_match_failure'];
   const f=(names)=>mcpTools.filter(t=>names.includes(t.name)).map(t=>t.name);
@@ -289,26 +243,7 @@ async function runGPT(inputMsgs,res){
   for(const item of(result.output||[])){if(item.type==='message'){for(const c of(item.content||[])){if(c.type==='text'&&c.text)emitChunked(res,c.text);}}if(item.type==='mcp_call')writeSSE(res,{tool_call:{name:item.name,input:item.arguments}});if(item.type==='mcp_result')writeSSE(res,{tool_result:{name:item.name||'tool',ok:!item.error}});}
 }
 
-// ════ API Routes ══════════════════════════════════════════════════════════
-
-// ── TTS Routes ──
-app.get('/api/tts/voices', (_req, res) => res.json({ voices: KO_VOICES }));
-
-app.post('/api/tts', async (req, res) => {
-  const { text, voice = 'ko-KR-SunHiNeural', rate = '+0%', pitch = '+0Hz' } = req.body || {};
-  if (!text?.trim()) return res.status(400).json({ error: '텍스트 없음' });
-  try {
-    console.log(`[TTS] ${voice} rate=${rate} pitch=${pitch} len=${text.length}`);
-    const audio = await edgeTTS(text.slice(0, 600), voice, rate, pitch);
-    res.setHeader('Content-Type', 'audio/mpeg');
-    res.setHeader('Content-Length', audio.length);
-    res.setHeader('Cache-Control', 'no-cache');
-    res.send(audio);
-  } catch(e) {
-    console.error('[Edge TTS error]', e.message);
-    res.status(500).json({ error: e.message });
-  }
-});
+// ════ API Routes ════════════════════════════════════════════════════
 
 // ── Chat Route ──
 app.post('/api/chat', async (req, res) => {
@@ -355,21 +290,23 @@ app.delete('/api/notifications/:id', async (req, res) => {
   res.json({success:ok});
 });
 
-// ── Status/Utility Routes ──
+// ── Status / Utility ──
 app.get('/api/status', (_req, res) => res.json({
-  claude:{model:CLAUDE_MODEL,api:CLAUDE_KEY?'OK':'⚠ 미설정'},
-  gemini:{model:GEMINI_MODEL,api:GEMINI_KEY?'OK':'⚠ 미설정'},
-  tts:{engine:'Edge TTS (msedge-tts)',voices:KO_VOICES.length,api_key:'불필요'},
-  drive:{status:knowledgeStatus,chars:knowledgeContext.length},
-  mcp:{connected:!!mcpClient,tools:mcpTools.length,url:MCP_SERVER_URL||'미설정'},
-  notifClients:notifClients.size, video_ss:VIDEO_SS_ID,
+  claude:     {model:CLAUDE_MODEL,api:CLAUDE_KEY?'OK':'⚠ 미설정'},
+  gemini:     {model:GEMINI_MODEL,api:GEMINI_KEY?'OK':'⚠ 미설정'},
+  gpt:        {model:GPT_MODEL,api:OPENAI_KEY?'OK':'⚠ 미설정'},
+  tts:        {engine:'Supertonic 2 ONNX (브라우저 사이드)',model:'onnx-community/Supertonic-TTS-2-ONNX',note:'서버 TTS 없음'},
+  drive:      {status:knowledgeStatus,chars:knowledgeContext.length},
+  mcp:        {connected:!!mcpClient,tools:mcpTools.length,url:MCP_SERVER_URL||'미설정'},
+  notifClients: notifClients.size,
+  video_ss:   VIDEO_SS_ID,
 }));
 app.post('/api/reload-knowledge', async (_req, res) => { knowledgeContext=''; knowledgeStatus='loading...'; await loadDriveKnowledge(); res.json({status:knowledgeStatus}); });
 app.post('/api/reconnect-mcp', async (_req, res) => { mcpClient=null; mcpTools=[]; await connectMCP(); res.json({connected:!!mcpClient,tools:mcpTools.length}); });
 
 app.listen(PORT, '0.0.0.0', () => {
-  console.log(`🔱 ASTERION Hub v4.0.1 — port ${PORT}`);
-  console.log(`   TTS    : msedge-tts · ${KO_VOICES.length}화자 · rate/pitch 지원`);
+  console.log(`🔱 ASTERION Hub v4.2 — port ${PORT}`);
+  console.log(`   TTS    : Supertonic 2 ONNX (브라우저 사이드, transformers.js)`);
   console.log(`   Claude : ${CLAUDE_MODEL} ${CLAUDE_KEY?'✓':'✗'}`);
   console.log(`   MCP    : ${MCP_SERVER_URL||'미설정'} | tools:${mcpTools.length}`);
 });
