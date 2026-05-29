@@ -1,9 +1,8 @@
 /**
- * ASTERION Hub — Chat Backend v4.2
+ * ASTERION Hub — Chat Backend v4.3
+ * v4.3: /api/tts 서버 사이드 추가 (Supertonic-TTS-2-ONNX, @huggingface/transformers)
+ *       Android 앱에서 POST /api/tts { text, sid, speed } → audio/wav 응답
  * v4.2: TTS → 브라우저 사이드 (Supertonic 2 ONNX, transformers.js)
- *   서버에서 TTS 코드 제거. /api/tts 엔드포인트 없음.
- * v4.0.1: Edge TTS → msedge-tts (Microsoft IP 차단으로 실패)
- * v4.0: Edge TTS 시도
  */
 
 import express    from 'express';
@@ -14,6 +13,7 @@ import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js';
 import EventSource from 'eventsource';
 import { fileURLToPath } from 'url';
 import { dirname, join }  from 'path';
+import { initTTS, generateTTS, getTTSStatus } from './tts_server.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname  = dirname(__filename);
@@ -48,6 +48,9 @@ const VIDEO_SS_ID     = '1ugWJmyLItD95Vz7Jq8Wjxn0_Ml5REjrhUxNZVFoIFmc';
 const NOTIF_SHEET     = 'BTRNotifications';
 const MAX_MSG_PAIRS   = 20;
 const MAX_TOOL_DEPTH  = 8;
+
+// TTS 엔진 비동기 초기화 (서버 시작 후 백그라운드)
+initTTS().catch(e => console.warn('[TTS] 초기화 실패:', e.message));
 
 async function getGCPToken() {
   try {
@@ -258,6 +261,29 @@ app.post('/api/chat', async (req, res) => {
   writeDone(res); res.end();
 });
 
+// ── TTS Route (서버 사이드 Supertonic-TTS-2-ONNX) ──
+// Android 앱 호출: POST /api/tts { text, sid, speed }
+// sid: 0=아스터(남성), 1=리언(여성), 2=나레이터
+// 응답: audio/wav (PCM 16bit mono 44100Hz)
+app.post('/api/tts', async (req, res) => {
+  const { text = '', sid = 0, speed = 1.0 } = req.body;
+  if (!text.trim()) return res.status(400).json({ error: 'text 필수' });
+  try {
+    const wavBuffer = await generateTTS(text, Number(sid), Number(speed));
+    res.setHeader('Content-Type', 'audio/wav');
+    res.setHeader('Content-Length', wavBuffer.length);
+    res.setHeader('X-TTS-Model', 'Supertonic-TTS-2-ONNX');
+    res.setHeader('X-TTS-Speaker', String(sid));
+    res.send(wavBuffer);
+  } catch(e) {
+    console.error('[TTS]', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// TTS 상태 확인
+app.get('/api/tts/status', (_req, res) => res.json(getTTSStatus()));
+
 // ── SOURCE_FILES 자동 동기화 ──
 app.post('/api/sync-source-files', async (req, res) => {
   const { bgv=[], bgm=[], spreadsheet_id=VIDEO_SS_ID } = req.body;
@@ -295,7 +321,7 @@ app.get('/api/status', (_req, res) => res.json({
   claude:     {model:CLAUDE_MODEL,api:CLAUDE_KEY?'OK':'⚠ 미설정'},
   gemini:     {model:GEMINI_MODEL,api:GEMINI_KEY?'OK':'⚠ 미설정'},
   gpt:        {model:GPT_MODEL,api:OPENAI_KEY?'OK':'⚠ 미설정'},
-  tts:        {engine:'Supertonic 2 ONNX (브라우저 사이드)',model:'onnx-community/Supertonic-TTS-2-ONNX',note:'서버 TTS 없음'},
+  tts:        getTTSStatus(),
   drive:      {status:knowledgeStatus,chars:knowledgeContext.length},
   mcp:        {connected:!!mcpClient,tools:mcpTools.length,url:MCP_SERVER_URL||'미설정'},
   notifClients: notifClients.size,
@@ -305,8 +331,8 @@ app.post('/api/reload-knowledge', async (_req, res) => { knowledgeContext=''; kn
 app.post('/api/reconnect-mcp', async (_req, res) => { mcpClient=null; mcpTools=[]; await connectMCP(); res.json({connected:!!mcpClient,tools:mcpTools.length}); });
 
 app.listen(PORT, '0.0.0.0', () => {
-  console.log(`🔱 ASTERION Hub v4.2 — port ${PORT}`);
-  console.log(`   TTS    : Supertonic 2 ONNX (브라우저 사이드, transformers.js)`);
+  console.log(`🔱 ASTERION Hub v4.3 — port ${PORT}`);
+  console.log(`   TTS    : POST /api/tts (Supertonic-TTS-2-ONNX, 서버 사이드)`);
   console.log(`   Claude : ${CLAUDE_MODEL} ${CLAUDE_KEY?'✓':'✗'}`);
   console.log(`   MCP    : ${MCP_SERVER_URL||'미설정'} | tools:${mcpTools.length}`);
 });
