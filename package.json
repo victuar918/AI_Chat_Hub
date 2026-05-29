@@ -1,7 +1,7 @@
 {
   "name": "asterion-hub-backend",
-  "version": "4.2.0",
-  "description": "ASTERION Hub Chat Backend — MCP + Supertonic browser TTS",
+  "version": "4.3.0",
+  "description": "ASTERION Hub Chat Backend — MCP + Supertonic server TTS",
   "main": "index.js",
   "type": "module",
   "scripts": {
@@ -12,6 +12,7 @@
     "cors":                         "^2.8.5",
     "googleapis":                   "^140.0.0",
     "@modelcontextprotocol/sdk":    "^1.0.1",
-    "eventsource":                  "^2.0.2"
+    "eventsource":                  "^2.0.2",
+    "@huggingface/transformers":    "^4.2.0"
   }
 }
