@@ -1,0 +1,16 @@
+app.post('/api/tts', async (req, res) => {
+  const { text = '', sid = 0, speed = null, format = 'mp3' } = req.body;
+  if (!text.trim()) return res.status(400).json({ error: 'text 필수' });
+  try {
+    const { buffer, mimeType } = await generateTTS(text, Number(sid), speed ? Number(speed) : null, format);
+    res.setHeader('Content-Type', mimeType);
+    res.setHeader('Content-Length', buffer.length);
+    res.setHeader('X-TTS-Model', 'Supertonic-TTS-3-ONNX');
+    res.setHeader('X-TTS-Speaker', String(sid));
+    res.setHeader('X-TTS-Format', format);
+    res.send(buffer);
+  } catch(e) {
+    console.error('[TTS]', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
