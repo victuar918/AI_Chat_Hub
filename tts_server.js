@@ -1,11 +1,11 @@
 /**
- * ASTERION Hub — Server-side TTS Module v2.2
- * Supertonic-TTS-3-ONNX — 동적 import로 서버 시작 지연 해결
+ * ASTERION Hub — TTS Module v3.0
+ * Supertonic-TTS-2-ONNX via @huggingface/transformers
+ * 출력: MP3 (lamejs) or WAV fallback
  */
 
 import { createRequire } from 'module';
 
-// lamejs CJS 안전 로드
 let lamejs = null;
 try {
   const require = createRequire(import.meta.url);
@@ -20,24 +20,23 @@ const SPEAKER_PRESETS = {
   2: { label: '나레이터', speakerIdx: 2, speed: 1.05 },
 };
 
-const TTS_MODEL           = 'onnx-community/Supertonic-TTS-3-ONNX';
-const NUM_INFERENCE_STEPS = 4;
+// Supertonic 2 — ko/en/es/pt/fr 5개 언어, sherpa-onnx와 독립적 아키텍처
+const TTS_MODEL           = 'onnx-community/Supertonic-TTS-2-ONNX';
+const NUM_INFERENCE_STEPS = 4;  // ⚠ 2이하면 누락 오류 발생
 const MP3_BITRATE         = 128;
 
 let ttsPipeline = null;
 let ttsStatus   = 'not_loaded';
 
-// ★ 동적 import — 서버 시작 시 이 코드가 실행되지 않음
 export async function initTTS() {
   try {
-    console.log('[TTS] @huggingface/transformers 로딩...');
+    console.log('[TTS] Supertonic-TTS-2-ONNX 로딩...');
     const { pipeline } = await import('@huggingface/transformers');
-    console.log('[TTS] Supertonic-TTS-3-ONNX 모델 로딩...');
     ttsPipeline = await pipeline('text-to-speech', TTS_MODEL, {
       dtype: 'fp32', device: 'cpu',
     });
     ttsStatus = 'ready';
-    console.log('[TTS] 준비 완료 — Supertonic 3');
+    console.log('[TTS] 준비 완료 — Supertonic 2 (5개 언어)');
   } catch(e) {
     ttsStatus = `error: ${e.message}`;
     console.warn('[TTS] 실패:', e.message);
@@ -45,7 +44,7 @@ export async function initTTS() {
 }
 
 export async function generateTTS(text, sid = 0, speed = null, format = 'mp3') {
-  if (!ttsPipeline) throw new Error('TTS 엔진 미준비 (서버 시작 후 잠시 대기)');
+  if (!ttsPipeline) throw new Error('TTS 엔진 미준비');
   const preset   = SPEAKER_PRESETS[sid] ?? SPEAKER_PRESETS[0];
   const spkSpeed = speed ?? preset.speed;
 
@@ -66,7 +65,7 @@ export async function generateTTS(text, sid = 0, speed = null, format = 'mp3') {
 }
 
 export function getTTSStatus() {
-  return { status: ttsStatus, model: TTS_MODEL, version: 3, mp3: !!lamejs };
+  return { status: ttsStatus, model: TTS_MODEL, version: 2, mp3: !!lamejs };
 }
 
 function float32ToMp3(float32Array, sampleRate) {
