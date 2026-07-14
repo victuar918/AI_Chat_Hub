@@ -17,7 +17,7 @@ body{height:100dvh;background:var(--bg);color:var(--tx);font-family:'Noto Sans K
 #topbar{height:52px;background:var(--bg1);border-bottom:1px solid var(--bdr);display:flex;align-items:center;justify-content:space-between;padding:0 14px;flex-shrink:0;gap:8px;}
 .logo{font-family:'Cinzel',serif;font-size:14px;letter-spacing:4px;color:var(--gold);white-space:nowrap}.logo span{font-size:9px;letter-spacing:2px;color:var(--tx3);display:block;margin-top:-2px}
 .mtog{display:flex;background:var(--bg2);border:1px solid var(--bdr);border-radius:20px;padding:3px;gap:2px;flex-shrink:0;}
-.mb{font-family:'Cinzel',serif;font-size:9px;letter-spacing:1px;padding:5px 10px;border-radius:16px;border:none;background:transparent;color:var(--tx3);cursor:pointer;transition:all .18s;white-space:nowrap;}.mb:hover{color:var(--tx2)}.mb.on-claude{background:var(--gold-a);color:var(--gold);border:1px solid rgba(201,169,110,.28)}.mb.on-gemini{background:rgba(74,172,170,.14);color:rgba(74,212,210,.9);border:1px solid rgba(74,172,170,.3)}
+.mb{font-family:'Cinzel',serif;font-size:9px;letter-spacing:1px;padding:5px 10px;border-radius:16px;border:none;background:transparent;color:var(--tx3);cursor:pointer;transition:all .18s;white-space:nowrap;}.mb:hover{color:var(--tx2)}.mb.on-claude{background:var(--gold-a);color:var(--gold);border:1px solid rgba(201,169,110,.28)}.mb.on-gemini{background:rgba(74,172,170,.14);color:rgba(74,212,210,.9);border:1px solid rgba(74,172,170,.3)}.mb.on-gpt{background:rgba(150,110,185,.16);color:rgba(205,165,235,.95);border:1px solid rgba(150,110,185,.35)}.av.a-gpt{background:rgba(150,110,185,.16);border:1px solid rgba(150,110,185,.35)}.who.gpt{color:rgba(205,165,235,.95)}
 #btr-wrap{position:relative;flex-shrink:0}
 #btr-btn{background:var(--bg2);border:1px solid var(--bdr2);border-radius:16px;padding:5px 11px;font-size:11px;color:var(--tx3);cursor:pointer;font-family:'Cinzel',serif;letter-spacing:1px;transition:all .25s;white-space:nowrap;display:flex;align-items:center;gap:5px;}
 #btr-btn:hover{border-color:var(--btr-b);color:var(--btr-tx)}#btr-btn.active{background:var(--btr-c);color:var(--btr-tx);border-color:var(--btr-b)}#btr-btn.has-notif{border-color:var(--btr-b);color:var(--btr-tx);animation:btr-pulse 2s infinite;}
@@ -116,7 +116,8 @@ select{background:var(--bg2);border:1px solid var(--bdr);color:var(--tx2);border
   <div class="logo">ASTERION<span>HUB</span></div>
   <div class="mtog">
     <button class="mb" id="b-claude" onclick="setModel('claude')">CLAUDE</button>
-    <button class="mb" id="b-gemini" onclick="setModel('gemini')">GEMINI</button>
+    <button class="mb" id="b-gemini" onclick="setModel('gemini')">NEMO</button>
+    <button class="mb" id="b-gpt" onclick="setModel('gpt')">GLM</button>
   </div>
   <div id="btr-wrap"><button id="btr-btn" onclick="toggleBtr()"><span id="sse-dot"></span>🔔 BTR<span id="btr-badge"></span></button></div>
 </div>
@@ -254,6 +255,7 @@ const MODEL_STYLE={
 };
 
 // ══ 대화 기록 ══
+MODEL_STYLE.gemini.label='NEMO';MODEL_STYLE.gpt={avClass:'a-gpt',whoClass:'gpt',label:'GLM',icon:'❖'};
 const CONV_KEY='ah-conversations-v1',PREF_KEY='ah-v52';
 const MAX_CONVS=30,MAX_MSGS=120;
 function genConvId(){return 'conv-'+Date.now()+'-'+Math.random().toString(36).slice(2,6);}
@@ -575,7 +577,7 @@ function emptyHTML(){return '<div id="empty"><div class="e-star">✦</div><div c
 async function checkStatus(){try{const d=await(await fetch('/api/status')).json();const s=d.drive?.status||'';if(s.startsWith('loaded'))setKB('KB '+(d.drive?.chars>0?'연결됨':'0'),'#5a8a6a');else if(s.includes('error'))setKB('KB 오류','#9a5040');else setKB('KB 미설정','#6b5c44');document.getElementById('mcp-badge').textContent=(d.mcp?.tools||0)>0?d.mcp.tools+' tools':'';}catch(_){setKB('오류','#9a5040');}}
 function setKB(t,c){document.getElementById('kb-txt').textContent=t;document.getElementById('kb-dot').style.background=c;}
 async function reloadKB(){setKB('로드 중…','#c9a96e');try{await fetch('/api/reload-knowledge',{method:'POST'});await checkStatus();toast('KB 새로고침 완료');}catch(e){toast('실패: '+e.message);}}
-function setModel(m,sv=true){if(!MODEL_STYLE[m])return;S.model=m;['claude','gemini'].forEach(k=>{const btn=document.getElementById('b-'+k);if(btn)btn.className='mb'+(k===m?' on-'+k:'');});if(sv)save();}
+function setModel(m,sv=true){if(!MODEL_STYLE[m])return;S.model=m;['claude','gemini','gpt'].forEach(k=>{const btn=document.getElementById('b-'+k);if(btn)btn.className='mb'+(k===m?' on-'+k:'');});if(sv)save();}
 function toggleFree(){S.freestyle=!S.freestyle;applyFreestyle(true);save();}
 function applyFreestyle(t){document.getElementById('free-btn').classList.toggle('on-red',S.freestyle);document.getElementById('free-banner').classList.toggle('show',S.freestyle);if(t)toast(S.freestyle?'페르소나 해제':'페르소나 복원됨');}
 function onKey(e){if(e.key==='Enter'&&(e.ctrlKey||e.metaKey)){e.preventDefault();send();}}
