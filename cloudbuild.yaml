@@ -29,6 +29,8 @@ steps:
       - '--allow-unauthenticated'
       - '--timeout'
       - '900'
+      - '--memory'
+      - '2Gi'
 
 # 빌드된 이미지 보관
 images:
