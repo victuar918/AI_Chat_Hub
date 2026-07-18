@@ -117,7 +117,7 @@ select{background:var(--bg2);border:1px solid var(--bdr);color:var(--tx2);border
   <div class="mtog">
     <button class="mb" id="b-claude" onclick="setModel('claude')">CLAUDE</button>
     <button class="mb" id="b-gemini" onclick="setModel('gemini')">NEMO</button>
-    <button class="mb" id="b-gpt" onclick="setModel('gpt')">GLM</button>
+    <button class="mb" id="b-gpt" onclick="setModel('gpt')">DeepSeek</button>
   </div>
   <div id="btr-wrap"><button id="btr-btn" onclick="toggleBtr()"><span id="sse-dot"></span>🔔 BTR<span id="btr-badge"></span></button></div>
 </div>
@@ -255,7 +255,7 @@ const MODEL_STYLE={
 };
 
 // ══ 대화 기록 ══
-MODEL_STYLE.gemini.label='NEMO';MODEL_STYLE.gpt={avClass:'a-gpt',whoClass:'gpt',label:'GLM',icon:'❖'};
+MODEL_STYLE.gemini.label='NEMO';MODEL_STYLE.gpt={avClass:'a-gpt',whoClass:'gpt',label:'DeepSeek',icon:'❖'};
 const CONV_KEY='ah-conversations-v1',PREF_KEY='ah-v52';
 const MAX_CONVS=30,MAX_MSGS=120;
 function genConvId(){return 'conv-'+Date.now()+'-'+Math.random().toString(36).slice(2,6);}
