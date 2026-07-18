@@ -47,7 +47,7 @@ const ARCHIVE_SS_ID   = '1ym1cgr1apEyTlqtJXqrfdnLjoyJTh086CjGycMcUOS8';
 const VIDEO_SS_ID     = '1ugWJmyLItD95Vz7Jq8Wjxn0_Ml5REjrhUxNZVFoIFmc';
 const NOTIF_SHEET     = 'BTRNotifications';
 const MAX_MSG_PAIRS   = 20;
-const MAX_TOOL_DEPTH  = 8;
+const MAX_TOOL_DEPTH  = 15;
 
 // TTS 엔진 비동기 초기화 (서버 시작 후 백그라운드)
 initTTS().catch(e => console.warn('[TTS] 초기화 실패:', e.message));
@@ -178,14 +178,14 @@ function buildMcpToolSection() {
 
 function buildClaudeSystem(freestyle,extra){
   if(freestyle)return '자유롭게 대화하는 AI 어시스턴트다.';
-  const blocks=[{type:'text',text:ASTERION_BASE+buildMcpToolSection(),cache_control:{type:'ephemeral'}}];
+  const blocks=[{type:'text',text:ASTERION_BASE+buildMcpToolSection()+'\n\n[작업 지속성]\n작업을 요청받으면 완료될 때까지 필요한 도구를 스스로 계속 호출하며 다음 단계를 이어간다. 중간 상태만 보고하고 멈추지 않는다. 더 이상 수행할 단계가 없을 때만 최종 답변한다. 불확실하면 사용자에게 되묻기 전에 도구로 먼저 검증하고 진행한다. 여러 단계가 필요한 작업은 한 번의 응답 안에서 끝까지 처리한다.',cache_control:{type:'ephemeral'}}];
   if(knowledgeContext.length>500)blocks.push({type:'text',text:`[지식베이스]\n${knowledgeContext}`,cache_control:{type:'ephemeral'}});
   if(extra?.trim())blocks.push({type:'text',text:`[추가 시스템]\n${extra.trim()}`});
   return blocks;
 }
 function buildStringSystem(freestyle,extra){
   if(freestyle)return '자유롭게 대화하는 AI 어시스턴트다.';
-  const base=ASTERION_BASE+buildMcpToolSection();
+  const base=ASTERION_BASE+buildMcpToolSection()+'\n\n[작업 지속성]\n작업을 요청받으면 완료될 때까지 필요한 도구를 스스로 계속 호출하며 다음 단계를 이어간다. 중간 상태만 보고하고 멈추지 않는다. 더 이상 수행할 단계가 없을 때만 최종 답변한다. 불확실하면 사용자에게 되묻기 전에 도구로 먼저 검증하고 진행한다. 여러 단계가 필요한 작업은 한 번의 응답 안에서 끝까지 처리한다.';
   return [base,knowledgeContext?`[지식베이스]\n${knowledgeContext}`:'',extra?.trim()?`[추가 시스템]\n${extra.trim()}`:''].filter(Boolean).join('\n\n');
 }
 
