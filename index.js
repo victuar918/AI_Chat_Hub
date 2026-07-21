@@ -105,16 +105,28 @@ async function connectMCP() {
     const r = await mcpClient.listTools();
     mcpTools = (r.tools || []).map(t => ({ name: t.name, description: t.description || '', parameters: t.inputSchema || { type:'object', properties:{} } }));
     console.log(`[MCP] 연결 완료. 도구 ${mcpTools.length}개`);
-    mcpClient.onclose = () => { mcpClient = null; mcpTools = []; mcpRetryTimer = setTimeout(connectMCP, 30000); };
+    mcpClient.onclose = () => { mcpClient = null; mcpTools = []; mcpRetryTimer = setTimeout(connectMCP, 3000); };
   } catch (e) {
     console.error('[MCP] 연결 실패:', e.message);
     mcpClient = null; mcpTools = [];
-    mcpRetryTimer = setTimeout(connectMCP, 60000);
+    mcpRetryTimer = setTimeout(connectMCP, 10000);
   }
 }
 connectMCP();
 
 async function callMCPTool(name, input) {
+  let lastErr = 'unavailable';
+  for (let att = 0; att < 3; att++) {
+    if (!mcpClient) { try { await connectMCP(); } catch (_) {} }
+    if (mcpClient) {
+      try { const r = await mcpClient.callTool({ name, arguments: input || {} }); return JSON.stringify(r.content).slice(0, 8000); }
+      catch (e) { lastErr = e.message; mcpClient = null; }
+    }
+    await new Promise(w => setTimeout(w, 1200));
+  }
+  return JSON.stringify({ error: 'MCP retry failed: ' + lastErr });
+}
+async function callMCPToolLegacy(name, input) {
   if (!mcpClient) return JSON.stringify({ error: 'MCP 서버 미연결' });
   try { const r = await mcpClient.callTool({ name, arguments: input || {} }); return JSON.stringify(r.content).slice(0, 8000); }
   catch (e) { return JSON.stringify({ error: e.message }); }
